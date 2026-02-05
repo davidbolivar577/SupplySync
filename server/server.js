@@ -30,6 +30,83 @@ app.get('/inventory', async (req, res) => {
 
 // ... (app.listen code is below this)
 
+// ... (Your existing /inventory route is above this)
+
+// POST: CHECKOUT ITEM
+app.post('/checkout', async (req, res) => {
+  const { inventoryId, contractorId, projectId } = req.body;
+
+  try {
+    // Start a "Transaction" (safe mode)
+    await pool.query('BEGIN');
+
+    // 1. Decrease Quantity
+    const updateResult = await pool.query(
+      'UPDATE inventory SET quantity = quantity - 1 WHERE id = $1 RETURNING *',
+      [inventoryId]
+    );
+
+    if (updateResult.rows.length === 0) {
+      throw new Error('Item not found');
+    }
+
+    // 2. Log the Transaction
+    await pool.query(
+      `INSERT INTO transactions 
+      (inventory_id, contractor_id, project_id, action_type, quantity_changed) 
+      VALUES ($1, $2, $3, 'CHECK_OUT', -1)`,
+      [inventoryId, contractorId, projectId]
+    );
+
+    // Commit the changes (save them)
+    await pool.query('COMMIT');
+
+    res.json({ message: 'Checkout successful', item: updateResult.rows[0] });
+
+  } catch (err) {
+    await pool.query('ROLLBACK'); // Undo changes if error
+    console.error(err.message);
+    res.status(500).json({ error: 'Checkout failed' });
+  }
+});
+
+// ... (app.listen is below this)
+// POST: RETURN ITEM
+app.post('/return', async (req, res) => {
+  const { inventoryId, contractorId, projectId } = req.body;
+
+  try {
+    await pool.query('BEGIN');
+
+    // 1. Increase Quantity
+    const updateResult = await pool.query(
+      'UPDATE inventory SET quantity = quantity + 1 WHERE id = $1 RETURNING *',
+      [inventoryId]
+    );
+
+    if (updateResult.rows.length === 0) {
+      throw new Error('Item not found');
+    }
+
+    // 2. Log the Return Transaction
+    await pool.query(
+      `INSERT INTO transactions 
+      (inventory_id, contractor_id, project_id, action_type, quantity_changed) 
+      VALUES ($1, $2, $3, 'RETURN', 1)`,
+      [inventoryId, contractorId, projectId]
+    );
+
+    await pool.query('COMMIT');
+
+    res.json({ message: 'Return successful', item: updateResult.rows[0] });
+
+  } catch (err) {
+    await pool.query('ROLLBACK');
+    console.error(err.message);
+    res.status(500).json({ error: 'Return failed' });
+  }
+});
+
 // 2. Start the Server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
