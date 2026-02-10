@@ -107,6 +107,48 @@ app.post('/return', async (req, res) => {
   }
 });
 
+// GET: TRANSACTION HISTORY
+app.get('/transactions', async (req, res) => {
+  try {
+    const query = `
+      SELECT t.id, i.name as item, c.first_name, c.last_name, t.action_type, 
+      t.transaction_date as timestamp  
+      FROM transactions t
+      JOIN inventory i ON t.inventory_id = i.id
+      JOIN contractors c ON t.contractor_id = c.id
+      ORDER BY t.transaction_date DESC 
+      LIMIT 10
+    `;
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET: ALL CONTRACTORS (for dropdowns)
+app.get('/contractors', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM contractors ORDER BY last_name ASC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET: ALL PROJECTS (for dropdowns)
+app.get('/projects', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM projects ORDER BY name ASC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // 2. Start the Server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
