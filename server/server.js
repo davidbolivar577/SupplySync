@@ -149,6 +149,25 @@ app.get('/projects', async (req, res) => {
   }
 });
 
+// POST: ADD NEW INVENTORY ITEM
+app.post('/inventory', async (req, res) => {
+  const { name, category, quantity, location, unit_cost } = req.body;
+
+  try {
+    const newTool = await pool.query(
+      `INSERT INTO inventory (name, category, quantity, location, unit_cost) 
+       VALUES ($1, $2, $3, $4, $5) 
+       RETURNING *`,
+      [name, category, quantity, location, unit_cost]
+    );
+
+    res.json(newTool.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: 'Failed to add item' });
+  }
+});
+
 // 2. Start the Server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
