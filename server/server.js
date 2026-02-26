@@ -168,6 +168,27 @@ app.post('/inventory', async (req, res) => {
   }
 });
 
+// PUT: UPDATE EXISTING INVENTORY ITEM
+app.put('/inventory/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, category, quantity, location, unit_cost } = req.body;
+
+    const updateQuery = await pool.query(
+      `UPDATE inventory 
+       SET name = $1, category = $2, quantity = $3, location = $4, unit_cost = $5 
+       WHERE id = $6 
+       RETURNING *`,
+      [name, category, quantity, location, unit_cost, id]
+    );
+
+    res.json(updateQuery.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: 'Failed to update item' });
+  }
+});
+
 // 2. Start the Server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
