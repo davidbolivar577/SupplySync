@@ -168,6 +168,36 @@ app.post('/inventory', async (req, res) => {
   }
 });
 
+// POST: ADD NEW CONTRACTOR
+app.post('/contractors', async (req, res) => {
+  try {
+    const { first_name, last_name, phone, email } = req.body;
+    const newContractor = await pool.query(
+      'INSERT INTO contractors (first_name, last_name, phone, email) VALUES ($1, $2, $3, $4) RETURNING *',
+      [first_name, last_name, phone, email]
+    );
+    res.json(newContractor.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: 'Failed to add contractor' });
+  }
+});
+
+// POST: ADD NEW PROJECT
+app.post('/projects', async (req, res) => {
+  try {
+    const { name, address } = req.body;
+    const newProject = await pool.query(
+      "INSERT INTO projects (name, address, status) VALUES ($1, $2, 'ACTIVE') RETURNING *",
+      [name, address]
+    );
+    res.json(newProject.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: 'Failed to add project' });
+  }
+});
+
 // PUT: UPDATE EXISTING INVENTORY ITEM
 app.put('/inventory/:id', async (req, res) => {
   try {

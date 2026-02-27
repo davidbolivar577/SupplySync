@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import AddItemForm from './AddItemForm';
 import EditItemForm from './EditItemForm';
+import AdminTools from './AdminTools';
 
 function App() {
   const [inventory, setInventory] = useState([]);
@@ -12,11 +13,8 @@ function App() {
   const [selectedProject, setSelectedProject] = useState('');
   const [actionQueue, setActionQueue] = useState([]);
 
-  // NEW: Search and Filter State
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-
-  // NEW: Track which item is currently being edited
   const [editingItem, setEditingItem] = useState(null);
 
   const fetchAllData = () => {
@@ -89,16 +87,13 @@ function App() {
     }
   };
 
-  // NEW: Filter the inventory before displaying it
   const filteredInventory = inventory.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === '' || item.category === categoryFilter;
     return matchesSearch && matchesCategory;
   });
 
-  // NEW: Group the history by Timestamp and Action Type
   const groupedHistory = history.reduce((acc, log) => {
-    // We format the time so items submitted in the same second share a key
     const timeString = new Date(log.timestamp).toLocaleString();
     const actionName = log.action_type === 'CHECK_OUT' ? 'Checkout' : 'Return';
     const groupKey = `${timeString} - ${actionName}`;
@@ -112,6 +107,7 @@ function App() {
     <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif', maxWidth: '1200px', margin: '0 auto' }}>
       <h1>SupplySync Dashboard</h1>
 
+      {/* SELECTION BAR */}
       <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#e9ecef', borderRadius: '5px' }}>
         <h3>1. Select Who & Where:</h3>
         <label style={{ marginRight: '10px' }}>Contractor:</label>
@@ -126,13 +122,13 @@ function App() {
         </select>
       </div>
 
+      {/* FLEXBOX TWO-COLUMN LAYOUT START */}
       <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
 
-        {/* LEFT COLUMN */}
-        <div style={{ flex: '7' }}>
+        {/* --- LEFT COLUMN --- */}
+        <div style={{ flex: '7', minWidth: 0 }}>
           <h2>📦 Inventory</h2>
 
-          {/* NEW FIX: Show Edit Form if an item is selected, otherwise show Add Form */}
           {editingItem ? (
             <EditItemForm
               item={editingItem}
@@ -143,7 +139,6 @@ function App() {
             <AddItemForm onAddSuccess={fetchAllData} />
           )}
 
-          {/* NEW: Search and Filter UI */}
           <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
             <input
               type="text"
@@ -174,7 +169,6 @@ function App() {
               </tr>
             </thead>
             <tbody>
-              {/* NEW: Map over filteredInventory instead of inventory */}
               {filteredInventory.map((item) => {
                 const available = getAvailableQty(item);
                 const isOutOfStock = available <= 0;
@@ -184,14 +178,12 @@ function App() {
                     <td style={{ fontWeight: 'bold' }}>{item.quantity} <span style={{ color: '#007bff', fontWeight: 'normal' }}>(Avail: {available})</span></td>
                     <td>{item.status}</td>
                     <td>
-                      {/* NEW FIX: Edit Button */}
                       <button
                         onClick={() => setEditingItem(item)}
                         style={{ backgroundColor: '#ffc107', color: 'black', marginRight: '5px', padding: '5px 10px', border: 'none', cursor: 'pointer' }}
                       >
                         Edit
                       </button>
-
                       <button onClick={() => handleAddToQueue('checkout', item)} disabled={isOutOfStock} style={{ backgroundColor: isOutOfStock ? '#ccc' : '#ff4d4d', color: 'white', marginRight: '5px', padding: '5px 10px', border: 'none', cursor: isOutOfStock ? 'not-allowed' : 'pointer' }}>Out</button>
                       <button onClick={() => handleAddToQueue('return', item)} style={{ backgroundColor: '#28a745', color: 'white', padding: '5px 10px', border: 'none', cursor: 'pointer' }}>In</button>
                     </td>
@@ -205,13 +197,10 @@ function App() {
           </table>
 
           <h2>🕒 Recent Activity</h2>
-
           <div style={{ border: '1px solid #ccc', padding: '10px', borderRadius: '5px', backgroundColor: '#f9f9f9' }}>
             {Object.keys(groupedHistory).length === 0 ? <p>No recent activity.</p> : null}
 
             {Object.entries(groupedHistory).map(([groupKey, logs]) => {
-
-              // NEW FIX: If there is ONLY ONE action in this group, skip the dropdown entirely!
               if (logs.length === 1) {
                 const log = logs[0];
                 return (
@@ -224,7 +213,6 @@ function App() {
                 );
               }
 
-              // OTHERWISE: If there are multiple actions, proceed with the folder logic
               const subGroupedByItem = logs.reduce((acc, log) => {
                 if (!acc[log.item]) acc[log.item] = [];
                 acc[log.item].push(log);
@@ -241,7 +229,6 @@ function App() {
 
                   <div style={{ padding: '0 15px 10px 15px' }}>
                     {itemTypesCount > 1 ? (
-                      // Multiple item types -> Show nested dropdowns
                       Object.entries(subGroupedByItem).map(([itemName, itemLogs]) => (
                         <details key={itemName} style={{ marginTop: '5px', backgroundColor: '#fdfdfd', border: '1px solid #eee', borderRadius: '4px' }}>
                           <summary style={{ cursor: 'pointer', padding: '5px', fontSize: '0.95em', fontWeight: 'bold' }}>
@@ -257,7 +244,6 @@ function App() {
                         </details>
                       ))
                     ) : (
-                      // Only one item type -> Show flat list inside the folder
                       <ul style={{ listStyle: 'none', padding: '0', margin: 0 }}>
                         {logs.map(log => (
                           <li key={log.id} style={{ padding: '5px 0', borderBottom: '1px dotted #ccc', fontSize: '0.9em' }}>
@@ -272,9 +258,10 @@ function App() {
             })}
           </div>
         </div>
+        {/* --- END LEFT COLUMN --- */}
 
-        {/* RIGHT COLUMN */}
-        <div style={{ flex: '3', border: '2px solid #333', borderRadius: '8px', padding: '15px', backgroundColor: '#fff', position: 'sticky', top: '20px' }}>
+        {/* --- RIGHT COLUMN --- */}
+        <div style={{ flex: '3', minWidth: 0, border: '2px solid #333', borderRadius: '8px', padding: '15px', backgroundColor: '#fff', position: 'sticky', top: '20px' }}>
           <h2 style={{ marginTop: 0 }}>🛒 Pending Changes</h2>
           {actionQueue.length === 0 ? (
             <p style={{ color: '#777', fontStyle: 'italic' }}>Your queue is empty. Click 'Out' or 'In' on an item to stage it here.</p>
@@ -298,8 +285,14 @@ function App() {
             </>
           )}
         </div>
+        {/* --- END RIGHT COLUMN --- */}
 
-      </div>
+      </div> 
+      {/* FLEXBOX TWO-COLUMN LAYOUT END */}
+
+      {/* ADMIN TOOLS GOES HERE, BELOW EVERYTHING */}
+      <AdminTools onAddSuccess={fetchAllData} />
+
     </div>
   );
 }
