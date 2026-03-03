@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 function AdminTools({ onAddSuccess }) {
+    const API_BASE_URL = import.meta.env.VITE_API_URL;
     // Contractor State
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
@@ -11,7 +12,7 @@ function AdminTools({ onAddSuccess }) {
 
     const handleAddContractor = (e) => {
         e.preventDefault();
-        fetch('http://localhost:5000/contractors', {
+        fetch(`${API_BASE_URL}/contractors`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ first_name: firstName, last_name: lastName, phone: null, email: null })
@@ -27,7 +28,7 @@ function AdminTools({ onAddSuccess }) {
 
     const handleAddProject = (e) => {
         e.preventDefault();
-        fetch('http://localhost:5000/projects', {
+        fetch(`${API_BASE_URL}/projects`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: projectName, address: projectAddress })

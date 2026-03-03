@@ -4,6 +4,8 @@ import EditItemForm from './EditItemForm';
 import AdminTools from './AdminTools';
 
 function App() {
+  // NEW: Define the base URL using the environment variable
+  const API_BASE_URL = import.meta.env.VITE_API_URL;
   const [inventory, setInventory] = useState([]);
   const [history, setHistory] = useState([]);
   const [contractors, setContractors] = useState([]);
@@ -18,10 +20,10 @@ function App() {
   const [editingItem, setEditingItem] = useState(null);
 
   const fetchAllData = () => {
-    fetch('http://localhost:5000/inventory').then(res => res.json()).then(setInventory);
-    fetch('http://localhost:5000/transactions').then(res => res.json()).then(setHistory);
-    fetch('http://localhost:5000/contractors').then(res => res.json()).then(setContractors);
-    fetch('http://localhost:5000/projects').then(res => res.json()).then(setProjects);
+    fetch(`${API_BASE_URL}/inventory`).then(res => res.json()).then(setInventory);
+    fetch(`${API_BASE_URL}/transactions`).then(res => res.json()).then(setHistory);
+    fetch(`${API_BASE_URL}/contractors`).then(res => res.json()).then(setContractors);
+    fetch(`${API_BASE_URL}/projects`).then(res => res.json()).then(setProjects);
   };
 
   useEffect(() => {
@@ -67,8 +69,9 @@ function App() {
   const handleSubmitQueue = async () => {
     if (actionQueue.length === 0) return;
     try {
-      await Promise.all(actionQueue.map(action =>
-        fetch(`http://localhost:5000/${action.type}`, {
+      await Promise.all(actionQueue.map(async (action) => {
+        // NEW: Swap the hardcoded URL here:
+        const res = await fetch(`${API_BASE_URL}/${action.type}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -76,14 +79,22 @@ function App() {
             contractorId: action.contractorId,
             projectId: action.projectId
           })
-        })
-      ));
+        });
+        
+        // NEW: If the backend sends an error status (like 500), force it to throw!
+        if (!res.ok) {
+          throw new Error(`Backend rejected the ${action.type} request.`);
+        }
+      }));
+
+      // If we make it here, every single request was 100% successful
       alert('✅ All changes submitted successfully!');
       setActionQueue([]);
       fetchAllData();
+      
     } catch (error) {
       console.error("Error processing queue:", error);
-      alert('❌ Something went wrong submitting the queue.');
+      alert('❌ Something went wrong submitting the queue. Check the database logs.');
     }
   };
 

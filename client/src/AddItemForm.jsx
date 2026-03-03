@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 function AddItemForm({ onAddSuccess }) {
+  const API_BASE_URL = import.meta.env.VITE_API_URL;
   const [name, setName] = useState('');
   const [category, setCategory] = useState('TOOL');
   const [quantity, setQuantity] = useState(1);
@@ -22,7 +23,7 @@ function AddItemForm({ onAddSuccess }) {
       unit_cost: parsedCost 
     };
 
-    fetch('http://localhost:5000/inventory', {
+    fetch(`${API_BASE_URL}/inventory`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newItem)

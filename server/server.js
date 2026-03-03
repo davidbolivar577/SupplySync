@@ -32,78 +32,81 @@ app.get('/inventory', async (req, res) => {
 
 // ... (Your existing /inventory route is above this)
 
-// POST: CHECKOUT ITEM
+// POST: PROCESS A CHECKOUT (Transaction-Safe)
 app.post('/checkout', async (req, res) => {
-  const { inventoryId, contractorId, projectId } = req.body;
+  const client = await pool.connect(); // 1. Grab a dedicated connection
 
   try {
-    // Start a "Transaction" (safe mode)
-    await pool.query('BEGIN');
+    const { inventoryId, contractorId, projectId } = req.body;
+    
+    await client.query('BEGIN'); // 2. Start the transaction
 
-    // 1. Decrease Quantity
-    const updateResult = await pool.query(
-      'UPDATE inventory SET quantity = quantity - 1 WHERE id = $1 RETURNING *',
+    // Step A: Decrease the inventory quantity
+    const updateRes = await client.query(
+      `UPDATE inventory 
+       SET quantity = quantity - 1 
+       WHERE id = $1 AND quantity > 0 
+       RETURNING *`,
       [inventoryId]
     );
 
-    if (updateResult.rows.length === 0) {
-      throw new Error('Item not found');
+    // Safety check: If quantity was already 0, abort!
+    if (updateRes.rowCount === 0) {
+      throw new Error('Item out of stock or does not exist');
     }
 
-    // 2. Log the Transaction
-    await pool.query(
-      `INSERT INTO transactions 
-      (inventory_id, contractor_id, project_id, action_type, quantity_changed) 
-      VALUES ($1, $2, $3, 'CHECK_OUT', -1)`,
+    // Step B: Log the transaction history
+    await client.query(
+      `INSERT INTO transactions (inventory_id, contractor_id, project_id, action_type) 
+       VALUES ($1, $2, $3, 'CHECK_OUT')`,
       [inventoryId, contractorId, projectId]
     );
 
-    // Commit the changes (save them)
-    await pool.query('COMMIT');
-
-    res.json({ message: 'Checkout successful', item: updateResult.rows[0] });
+    await client.query('COMMIT'); // 3. Both succeeded! Save changes to DB.
+    res.json({ success: true, message: 'Checkout successful' });
 
   } catch (err) {
-    await pool.query('ROLLBACK'); // Undo changes if error
-    console.error(err.message);
+    await client.query('ROLLBACK'); // 🚨 Something failed! Undo everything.
+    console.error("Checkout transaction failed, rolled back:", err.message);
     res.status(500).json({ error: 'Checkout failed' });
+  } finally {
+    client.release(); // 4. Return the connection to the pool
   }
 });
 
-// ... (app.listen is below this)
-// POST: RETURN ITEM
+// POST: PROCESS A RETURN (Transaction-Safe)
 app.post('/return', async (req, res) => {
-  const { inventoryId, contractorId, projectId } = req.body;
+  const client = await pool.connect(); // 1. Grab a dedicated connection
 
   try {
-    await pool.query('BEGIN');
+    const { inventoryId, contractorId, projectId } = req.body;
+    
+    await client.query('BEGIN'); // 2. Start the transaction
 
-    // 1. Increase Quantity
-    const updateResult = await pool.query(
-      'UPDATE inventory SET quantity = quantity + 1 WHERE id = $1 RETURNING *',
+    // Step A: Increase the inventory quantity
+    await client.query(
+      `UPDATE inventory 
+       SET quantity = quantity + 1 
+       WHERE id = $1`,
       [inventoryId]
     );
 
-    if (updateResult.rows.length === 0) {
-      throw new Error('Item not found');
-    }
-
-    // 2. Log the Return Transaction
-    await pool.query(
-      `INSERT INTO transactions 
-      (inventory_id, contractor_id, project_id, action_type, quantity_changed) 
-      VALUES ($1, $2, $3, 'RETURN', 1)`,
+    // Step B: Log the transaction history
+    await client.query(
+      `INSERT INTO transactions (inventory_id, contractor_id, project_id, action_type) 
+       VALUES ($1, $2, $3, 'RETURN')`,
       [inventoryId, contractorId, projectId]
     );
 
-    await pool.query('COMMIT');
-
-    res.json({ message: 'Return successful', item: updateResult.rows[0] });
+    await client.query('COMMIT'); // 3. Both succeeded! Save changes to DB.
+    res.json({ success: true, message: 'Return successful' });
 
   } catch (err) {
-    await pool.query('ROLLBACK');
-    console.error(err.message);
+    await client.query('ROLLBACK'); // 🚨 Something failed! Undo everything.
+    console.error("Return transaction failed, rolled back:", err.message);
     res.status(500).json({ error: 'Return failed' });
+  } finally {
+    client.release(); // 4. Return the connection to the pool
   }
 });
 

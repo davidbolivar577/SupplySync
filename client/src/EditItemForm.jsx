@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 
 function EditItemForm({ item, onUpdateSuccess, onCancel }) {
+  const API_BASE_URL = import.meta.env.VITE_API_URL;
   const [name, setName] = useState('');
   const [category, setCategory] = useState('TOOL');
   const [quantity, setQuantity] = useState(1);
@@ -32,7 +33,7 @@ function EditItemForm({ item, onUpdateSuccess, onCancel }) {
       unit_cost: parsedCost 
     };
 
-    fetch(`http://localhost:5000/inventory/${item.id}`, {
+    fetch(`${API_BASE_URL}/inventory/${item.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updatedItem)
