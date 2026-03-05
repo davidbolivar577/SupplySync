@@ -4,7 +4,7 @@ import EditItemForm from './EditItemForm';
 import AdminTools from './AdminTools';
 
 function App() {
-  // NEW: Define the base URL using the environment variable
+  // Define the base URL using the environment variable
   const API_BASE_URL = import.meta.env.VITE_API_URL;
   const [inventory, setInventory] = useState([]);
   const [history, setHistory] = useState([]);
@@ -19,6 +19,8 @@ function App() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [editingItem, setEditingItem] = useState(null);
 
+  const [itemQuantities, setItemQuantities] = useState({});
+
   const fetchAllData = () => {
     fetch(`${API_BASE_URL}/inventory`).then(res => res.json()).then(setInventory);
     fetch(`${API_BASE_URL}/transactions`).then(res => res.json()).then(setHistory);
@@ -31,9 +33,9 @@ function App() {
   }, []);
 
   const getAvailableQty = (item) => {
-    const pendingCheckouts = actionQueue.filter(
-      action => action.item.id === item.id && action.type === 'checkout'
-    ).length;
+    const pendingCheckouts = actionQueue
+      .filter(action => action.item.id === item.id && action.type === 'checkout')
+      .reduce((total, action) => total + action.qty, 0); // Sum up the bulk quantities
     return item.quantity - pendingCheckouts;
   };
 
@@ -42,8 +44,12 @@ function App() {
       alert('⚠️ Please select a Contractor and a Project first!');
       return;
     }
-    if (actionType === 'checkout' && getAvailableQty(item) <= 0) {
-      alert(`⚠️ You cannot checkout ${item.name}. There are none left available!`);
+
+    // Get the quantity they typed, or default to 1
+    const qtyToProcess = parseInt(itemQuantities[item.id] || 1, 10);
+
+    if (actionType === 'checkout' && getAvailableQty(item) < qtyToProcess) {
+      alert(`⚠️ You cannot checkout ${qtyToProcess} of ${item.name}. Not enough available!`);
       return;
     }
 
@@ -57,9 +63,14 @@ function App() {
       contractorId: selectedContractor,
       contractorName: contractorName,
       projectId: selectedProject,
-      projectName: projectName
+      projectName: projectName,
+      qty: qtyToProcess // Save the quantity to the queue!
     };
+
     setActionQueue([...actionQueue, newAction]);
+
+    // Optional: Reset the input box back to 1 after adding to queue
+    setItemQuantities({ ...itemQuantities, [item.id]: 1 });
   };
 
   const handleRemoveFromQueue = (queueId) => {
@@ -70,18 +81,18 @@ function App() {
     if (actionQueue.length === 0) return;
     try {
       await Promise.all(actionQueue.map(async (action) => {
-        // NEW: Swap the hardcoded URL here:
         const res = await fetch(`${API_BASE_URL}/${action.type}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             inventoryId: action.item.id,
             contractorId: action.contractorId,
-            projectId: action.projectId
+            projectId: action.projectId,
+            quantityChanged: action.qty // Send to backend!
           })
         });
-        
-        // NEW: If the backend sends an error status (like 500), force it to throw!
+
+        // If the backend sends an error status (like 500), force it to throw!
         if (!res.ok) {
           throw new Error(`Backend rejected the ${action.type} request.`);
         }
@@ -91,7 +102,7 @@ function App() {
       alert('✅ All changes submitted successfully!');
       setActionQueue([]);
       fetchAllData();
-      
+
     } catch (error) {
       console.error("Error processing queue:", error);
       alert('❌ Something went wrong submitting the queue. Check the database logs.');
@@ -104,15 +115,34 @@ function App() {
     return matchesSearch && matchesCategory;
   });
 
-  const groupedHistory = history.reduce((acc, log) => {
-    const timeString = new Date(log.timestamp).toLocaleString();
-    const actionName = log.action_type === 'CHECK_OUT' ? 'Checkout' : 'Return';
-    const groupKey = `${timeString} - ${actionName}`;
+  // UPDATED: Streamlined minute-based grouping for history
+  const groupedHistory = Object.values(history.reduce((acc, log) => {
+    const date = new Date(log.timestamp);
+    const timeString = `${date.toLocaleDateString()} at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    const actionName = log.action_type === 'CHECK_OUT' ? 'Checked Out' : 'Returned';
+    const contractorName = `${log.first_name} ${log.last_name}`;
 
-    if (!acc[groupKey]) acc[groupKey] = [];
-    acc[groupKey].push(log);
+    // Unique key for the transaction session
+    const groupKey = `${contractorName}-${actionName}-${timeString}`;
+
+    if (!acc[groupKey]) {
+      acc[groupKey] = {
+        id: groupKey,
+        contractor: contractorName,
+        action: actionName,
+        time: timeString,
+        items: []
+      };
+    }
+
+    acc[groupKey].items.push({
+      id: log.id,
+      name: log.item,
+      qty: log.quantity_changed || 1
+    });
+
     return acc;
-  }, {});
+  }, {}));
 
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif', maxWidth: '1200px', margin: '0 auto' }}>
@@ -191,10 +221,20 @@ function App() {
                     <td>
                       <button
                         onClick={() => setEditingItem(item)}
-                        style={{ backgroundColor: '#ffc107', color: 'black', marginRight: '5px', padding: '5px 10px', border: 'none', cursor: 'pointer' }}
+                        style={{ backgroundColor: '#ffc107', color: 'black', marginRight: '10px', padding: '5px 10px', border: 'none', cursor: 'pointer' }}
                       >
                         Edit
                       </button>
+
+                      <input
+                        type="number"
+                        min="1"
+                        max={available}
+                        value={itemQuantities[item.id] || 1}
+                        onChange={(e) => setItemQuantities({ ...itemQuantities, [item.id]: e.target.value })}
+                        style={{ width: '50px', padding: '4px', marginRight: '5px' }}
+                      />
+
                       <button onClick={() => handleAddToQueue('checkout', item)} disabled={isOutOfStock} style={{ backgroundColor: isOutOfStock ? '#ccc' : '#ff4d4d', color: 'white', marginRight: '5px', padding: '5px 10px', border: 'none', cursor: isOutOfStock ? 'not-allowed' : 'pointer' }}>Out</button>
                       <button onClick={() => handleAddToQueue('return', item)} style={{ backgroundColor: '#28a745', color: 'white', padding: '5px 10px', border: 'none', cursor: 'pointer' }}>In</button>
                     </td>
@@ -207,66 +247,56 @@ function App() {
             </tbody>
           </table>
 
+          {/* UPDATED: Clean Card-Based Recent Activity */}
           <h2>🕒 Recent Activity</h2>
-          <div style={{ border: '1px solid #ccc', padding: '10px', borderRadius: '5px', backgroundColor: '#f9f9f9' }}>
-            {Object.keys(groupedHistory).length === 0 ? <p>No recent activity.</p> : null}
-
-            {Object.entries(groupedHistory).map(([groupKey, logs]) => {
-              if (logs.length === 1) {
-                const log = logs[0];
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '40px' }}>
+            {groupedHistory.length === 0 ? (
+              <p style={{ color: '#777', fontStyle: 'italic' }}>No recent activity.</p>
+            ) : (
+              groupedHistory.map((group) => {
+                const isCheckout = group.action === 'Checked Out';
                 return (
-                  <div key={groupKey} style={{ marginBottom: '5px', padding: '10px', backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: '4px' }}>
-                    <span style={{ color: '#888', fontSize: '0.85em', display: 'block', marginBottom: '4px' }}>{groupKey}</span>
-                    <span style={{ fontSize: '0.9em' }}>
-                      <strong>{log.first_name} {log.last_name}</strong> {log.action_type === 'CHECK_OUT' ? 'took' : 'returned'} <strong>{log.item}</strong>
-                    </span>
+                  <div key={group.id} style={{ 
+                    borderLeft: `5px solid ${isCheckout ? '#ff4d4d' : '#28a745'}`, 
+                    backgroundColor: '#fff', 
+                    padding: '15px', 
+                    borderRadius: '6px', 
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                    border: '1px solid #eaeaea',
+                    borderLeftWidth: '5px' 
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid #eee', paddingBottom: '8px' }}>
+                      <span style={{ fontSize: '0.9em', color: '#666' }}>{group.time}</span>
+                      <strong style={{ color: isCheckout ? '#d93025' : '#1e8e3e' }}>
+                        {isCheckout ? '📉' : '📈'} {group.action}
+                      </strong>
+                    </div>
+                    
+                    <div style={{ marginBottom: '8px', fontSize: '1.05em' }}>
+                      <strong>{group.contractor}</strong> processed:
+                    </div>
+                    
+                    <ul style={{ listStyleType: 'none', paddingLeft: '10px', margin: 0 }}>
+                      {group.items.map(item => (
+                        <li key={item.id} style={{ padding: '4px 0', fontSize: '0.95em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ 
+                            backgroundColor: '#f1f3f4', 
+                            padding: '2px 8px', 
+                            borderRadius: '12px', 
+                            fontSize: '0.85em', 
+                            fontWeight: 'bold',
+                            color: '#333'
+                          }}>
+                            {item.qty}x
+                          </span> 
+                          {item.name}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 );
-              }
-
-              const subGroupedByItem = logs.reduce((acc, log) => {
-                if (!acc[log.item]) acc[log.item] = [];
-                acc[log.item].push(log);
-                return acc;
-              }, {});
-
-              const itemTypesCount = Object.keys(subGroupedByItem).length;
-
-              return (
-                <details key={groupKey} style={{ marginBottom: '5px', backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: '4px' }}>
-                  <summary style={{ cursor: 'pointer', padding: '10px', fontWeight: 'bold', outline: 'none' }}>
-                    {groupKey} <span style={{ fontWeight: 'normal', color: '#666' }}>({logs.length} actions)</span>
-                  </summary>
-
-                  <div style={{ padding: '0 15px 10px 15px' }}>
-                    {itemTypesCount > 1 ? (
-                      Object.entries(subGroupedByItem).map(([itemName, itemLogs]) => (
-                        <details key={itemName} style={{ marginTop: '5px', backgroundColor: '#fdfdfd', border: '1px solid #eee', borderRadius: '4px' }}>
-                          <summary style={{ cursor: 'pointer', padding: '5px', fontSize: '0.95em', fontWeight: 'bold' }}>
-                            {itemName} <span style={{ fontWeight: 'normal', color: '#666' }}>({itemLogs.length})</span>
-                          </summary>
-                          <ul style={{ listStyle: 'none', padding: '5px 15px', margin: 0, borderTop: '1px solid #eee' }}>
-                            {itemLogs.map(log => (
-                              <li key={log.id} style={{ padding: '3px 0', borderBottom: '1px dotted #ccc', fontSize: '0.9em' }}>
-                                {log.first_name} {log.last_name} {log.action_type === 'CHECK_OUT' ? 'took this' : 'returned this'}
-                              </li>
-                            ))}
-                          </ul>
-                        </details>
-                      ))
-                    ) : (
-                      <ul style={{ listStyle: 'none', padding: '0', margin: 0 }}>
-                        {logs.map(log => (
-                          <li key={log.id} style={{ padding: '5px 0', borderBottom: '1px dotted #ccc', fontSize: '0.9em' }}>
-                            <strong>{log.first_name} {log.last_name}</strong> {log.action_type === 'CHECK_OUT' ? 'took' : 'returned'} <strong>{log.item}</strong>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </details>
-              );
-            })}
+              })
+            )}
           </div>
         </div>
         {/* --- END LEFT COLUMN --- */}
@@ -285,7 +315,7 @@ function App() {
                       <strong>{action.type === 'checkout' ? '📉 Checkout' : '📈 Return'}</strong>
                       <button onClick={() => handleRemoveFromQueue(action.id)} style={{ background: 'none', border: 'none', color: 'red', cursor: 'pointer', fontSize: '1.2em' }}>×</button>
                     </div>
-                    <div>Item: {action.item.name}</div>
+                    <div>Item: {action.item.name} <strong style={{ color: '#007bff' }}>(Qty: {action.qty})</strong></div>
                     <div style={{ color: '#666' }}>For: {action.contractorName}</div>
                   </li>
                 ))}
@@ -298,7 +328,7 @@ function App() {
         </div>
         {/* --- END RIGHT COLUMN --- */}
 
-      </div> 
+      </div>
       {/* FLEXBOX TWO-COLUMN LAYOUT END */}
 
       {/* ADMIN TOOLS GOES HERE, BELOW EVERYTHING */}

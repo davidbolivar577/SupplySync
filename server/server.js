@@ -32,90 +32,89 @@ app.get('/inventory', async (req, res) => {
 
 // ... (Your existing /inventory route is above this)
 
-// POST: PROCESS A CHECKOUT (Transaction-Safe)
+// POST: PROCESS A CHECKOUT (Bulk-Safe)
 app.post('/checkout', async (req, res) => {
-  const client = await pool.connect(); // 1. Grab a dedicated connection
+  const client = await pool.connect();
 
   try {
-    const { inventoryId, contractorId, projectId } = req.body;
+    const { inventoryId, contractorId, projectId, quantityChanged } = req.body;
     
-    await client.query('BEGIN'); // 2. Start the transaction
+    await client.query('BEGIN');
 
-    // Step A: Decrease the inventory quantity
+    // Step A: Decrease by the requested quantity
     const updateRes = await client.query(
       `UPDATE inventory 
-       SET quantity = quantity - 1 
-       WHERE id = $1 AND quantity > 0 
+       SET quantity = quantity - $2 
+       WHERE id = $1 AND quantity >= $2 
        RETURNING *`,
-      [inventoryId]
+      [inventoryId, quantityChanged]
     );
 
-    // Safety check: If quantity was already 0, abort!
     if (updateRes.rowCount === 0) {
-      throw new Error('Item out of stock or does not exist');
+      throw new Error('Not enough items in stock to fulfill this checkout');
     }
 
-    // Step B: Log the transaction history
+    // Step B: Log the transaction with the dynamic quantity
     await client.query(
-      `INSERT INTO transactions (inventory_id, contractor_id, project_id, action_type) 
-       VALUES ($1, $2, $3, 'CHECK_OUT')`,
-      [inventoryId, contractorId, projectId]
+      `INSERT INTO transactions (inventory_id, contractor_id, project_id, action_type, quantity_changed) 
+       VALUES ($1, $2, $3, 'CHECK_OUT', $4)`,
+      [inventoryId, contractorId, projectId, quantityChanged]
     );
 
-    await client.query('COMMIT'); // 3. Both succeeded! Save changes to DB.
+    await client.query('COMMIT');
     res.json({ success: true, message: 'Checkout successful' });
 
   } catch (err) {
-    await client.query('ROLLBACK'); // 🚨 Something failed! Undo everything.
-    console.error("Checkout transaction failed, rolled back:", err.message);
+    await client.query('ROLLBACK');
+    console.error("Checkout failed:", err.message);
     res.status(500).json({ error: 'Checkout failed' });
   } finally {
-    client.release(); // 4. Return the connection to the pool
+    client.release();
   }
 });
 
-// POST: PROCESS A RETURN (Transaction-Safe)
+// POST: PROCESS A RETURN (Bulk-Safe)
 app.post('/return', async (req, res) => {
-  const client = await pool.connect(); // 1. Grab a dedicated connection
+  const client = await pool.connect();
 
   try {
-    const { inventoryId, contractorId, projectId } = req.body;
+    const { inventoryId, contractorId, projectId, quantityChanged } = req.body;
     
-    await client.query('BEGIN'); // 2. Start the transaction
+    await client.query('BEGIN');
 
-    // Step A: Increase the inventory quantity
+    // Step A: Increase by the requested quantity
     await client.query(
       `UPDATE inventory 
-       SET quantity = quantity + 1 
+       SET quantity = quantity + $2 
        WHERE id = $1`,
-      [inventoryId]
+      [inventoryId, quantityChanged]
     );
 
-    // Step B: Log the transaction history
+    // Step B: Log the transaction with the dynamic quantity
     await client.query(
-      `INSERT INTO transactions (inventory_id, contractor_id, project_id, action_type) 
-       VALUES ($1, $2, $3, 'RETURN')`,
-      [inventoryId, contractorId, projectId]
+      `INSERT INTO transactions (inventory_id, contractor_id, project_id, action_type, quantity_changed) 
+       VALUES ($1, $2, $3, 'RETURN', $4)`,
+      [inventoryId, contractorId, projectId, quantityChanged]
     );
 
-    await client.query('COMMIT'); // 3. Both succeeded! Save changes to DB.
+    await client.query('COMMIT');
     res.json({ success: true, message: 'Return successful' });
 
   } catch (err) {
-    await client.query('ROLLBACK'); // 🚨 Something failed! Undo everything.
-    console.error("Return transaction failed, rolled back:", err.message);
+    await client.query('ROLLBACK');
+    console.error("Return failed:", err.message);
     res.status(500).json({ error: 'Return failed' });
   } finally {
-    client.release(); // 4. Return the connection to the pool
+    client.release();
   }
 });
 
-// GET: TRANSACTION HISTORY
+// GET RECENT TRANSACTIONS
 app.get('/transactions', async (req, res) => {
   try {
     const query = `
       SELECT t.id, i.name as item, c.first_name, c.last_name, t.action_type, 
-      t.transaction_date as timestamp  
+      t.quantity_changed, t.transaction_date as timestamp  
       FROM transactions t
       JOIN inventory i ON t.inventory_id = i.id
       JOIN contractors c ON t.contractor_id = c.id
