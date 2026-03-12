@@ -2,24 +2,23 @@
 
 .admin-container {
   margin-top: 40px;
-  background-color: #1e1e1e; /* Matches deep dark themes */
+  background-color: var(--bg-card);
   border-radius: 10px;
   padding: 25px;
-  border: 1px solid #333;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-  color: #e0e0e0;
-  text-align: left; /* Overrides the Vite default center alignment */
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  color: var(--text-main);
+  text-align: left;
 }
 
 .admin-header {
-  border-bottom: 2px solid #333;
+  border-bottom: 2px solid var(--border-color);
   padding-bottom: 15px;
   margin-top: 0;
   margin-bottom: 25px;
-  color: #fff;
+  color: var(--text-main);
 }
 
-/* CSS Grid prevents columns from squishing on smaller screens */
 .admin-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -27,8 +26,8 @@
 }
 
 .admin-card {
-  background: #2a2a2a;
-  border: 1px solid #3a3a3a;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 20px;
   display: flex;
@@ -38,13 +37,12 @@
 .admin-card h3 {
   margin-top: 0;
   margin-bottom: 20px;
-  color: #fff;
+  color: var(--text-main);
   font-size: 1.2rem;
-  border-bottom: 1px solid #3a3a3a;
+  border-bottom: 1px solid var(--border-color);
   padding-bottom: 10px;
 }
 
-/* --- Form & Input Styling --- */
 .admin-form {
   display: flex;
   gap: 10px;
@@ -53,38 +51,13 @@
 
 .admin-input {
   flex: 1;
-  padding: 10px 12px;
-  background-color: #1a1a1a;
-  color: #fff;
-  border: 1px solid #444;
-  border-radius: 6px;
-  font-size: 0.95rem;
-  min-width: 0; /* THE MAGIC FIX: Stops flexbox from squishing inputs! */
-  transition: border-color 0.2s;
+  min-width: 0; 
 }
 
-.admin-input:focus {
-  outline: none;
-  border-color: #646cff; /* Vite primary blue */
-}
-
-/* --- Buttons --- */
 .admin-btn {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s, opacity 0.2s;
   white-space: nowrap;
 }
 
-.admin-btn:hover { opacity: 0.9; }
-.btn-success { background-color: #28a745; color: white; }
-.btn-primary { background-color: #007bff; color: white; }
-.btn-secondary { background-color: #6c757d; color: white; }
-
-/* Icon Buttons (Edit/Delete) */
 .btn-icon {
   background: none;
   border: none;
@@ -97,12 +70,11 @@
   align-items: center;
   justify-content: center;
 }
-.btn-icon.edit { color: #ffc107; }
-.btn-icon.edit:hover { background-color: rgba(255, 193, 7, 0.1); }
-.btn-icon.delete { color: #ff4d4d; }
-.btn-icon.delete:hover { background-color: rgba(255, 77, 77, 0.1); }
+.btn-icon.edit { color: var(--warning); }
+.btn-icon.edit:hover { background-color: var(--bg-main); }
+.btn-icon.delete { color: var(--danger); }
+.btn-icon.delete:hover { background-color: var(--bg-main); }
 
-/* --- Lists --- */
 .admin-list {
   list-style: none;
   padding: 0;
@@ -112,18 +84,17 @@
   padding-right: 5px;
 }
 
-/* Custom dark scrollbar */
+/* Custom scrollbar matching theme */
 .admin-list::-webkit-scrollbar { width: 6px; }
-.admin-list::-webkit-scrollbar-track { background: #1a1a1a; border-radius: 4px; }
-.admin-list::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
-.admin-list::-webkit-scrollbar-thumb:hover { background: #555; }
+.admin-list::-webkit-scrollbar-track { background: var(--bg-surface); border-radius: 4px; }
+.admin-list::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
 
 .admin-list-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 12px 8px;
-  border-bottom: 1px solid #3a3a3a;
+  border-bottom: 1px solid var(--border-color);
   gap: 10px;
 }
 .admin-list-item:last-child { border-bottom: none; }
@@ -137,7 +108,7 @@
 }
 .admin-item-subtext {
   font-size: 0.85em;
-  color: #888;
+  color: var(--text-muted);
   margin-left: 8px;
 }
 

@@ -111,7 +111,7 @@ function AdminTools({ API_BASE_URL, inventory, contractors, projects, onAddSucce
         <div className="admin-card">
           <h3>Manage Inventory</h3>
           {editingItem ? (
-            <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '6px', border: '1px solid #444' }}>
+            <div style={{ backgroundColor: 'var(--bg-main)', padding: '15px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
               <EditItemForm
                 item={editingItem}
                 onUpdateSuccess={() => { setEditingItem(null); onAddSuccess(); }}

@@ -10,18 +10,10 @@ function AddItemForm({ onAddSuccess }) {
 
   const handleSubmit = (e) => {
     e.preventDefault(); 
-
-    // FIX: Convert cost to a number, or send null if left blank
     const parsedCost = cost ? parseFloat(cost) : null;
     const parsedQty = quantity ? parseInt(quantity, 10) : 0;
 
-    const newItem = { 
-      name, 
-      category, 
-      quantity: parsedQty, 
-      location, 
-      unit_cost: parsedCost 
-    };
+    const newItem = { name, category, quantity: parsedQty, location, unit_cost: parsedCost };
 
     fetch(`${API_BASE_URL}/inventory`, {
       method: 'POST',
@@ -30,58 +22,48 @@ function AddItemForm({ onAddSuccess }) {
     })
     .then(res => {
       if (res.ok) {
-        alert('Item Added Successfully!');
-        setName('');
-        setQuantity(1);
-        setLocation('');
-        setCost('');
+        setName(''); setQuantity(1); setLocation(''); setCost('');
         onAddSuccess(); 
       } else {
         alert('Backend rejected the data. Check your server terminal!');
       }
-    });
+    })
+    .catch(err => console.error("Error adding item:", err));
   };
 
   return (
-    <div style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '8px', marginBottom: '20px', backgroundColor: '#f9f9f9' }}>
-      <h3>➕ Add New Item</h3>
-      <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        
-        <div>
-          <label style={{ display: 'block', fontSize: '0.8em' }}>Name:</label>
-          <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Hammer" required style={{ padding: '5px' }} />
-        </div>
+    <form onSubmit={handleSubmit} style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', alignItems: 'flex-end', marginBottom: '25px', backgroundColor: 'var(--bg-surface)', padding: '15px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+      <div style={{ flex: '1', minWidth: '150px' }}>
+        <label style={{ display: 'block', fontSize: '0.8em', color: 'var(--text-muted)', marginBottom: '5px' }}>Item Name:</label>
+        <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Hammer" required style={{ width: '100%' }} />
+      </div>
 
-        <div>
-          <label style={{ display: 'block', fontSize: '0.8em' }}>Category:</label>
-          <select value={category} onChange={e => setCategory(e.target.value)} style={{ padding: '5px' }}>
-            <option value="TOOL">Tool</option>
-            <option value="PART">Part</option>
-            <option value="MATERIAL">Material</option>
-          </select>
-        </div>
+      <div>
+        <label style={{ display: 'block', fontSize: '0.8em', color: 'var(--text-muted)', marginBottom: '5px' }}>Category:</label>
+        <select value={category} onChange={e => setCategory(e.target.value)}>
+          <option value="TOOL">Tool</option>
+          <option value="PART">Part</option>
+          <option value="MATERIAL">Material</option>
+        </select>
+      </div>
 
-        <div>
-          <label style={{ display: 'block', fontSize: '0.8em' }}>Qty:</label>
-          <input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} min="1" style={{ width: '60px', padding: '5px' }} />
-        </div>
+      <div>
+        <label style={{ display: 'block', fontSize: '0.8em', color: 'var(--text-muted)', marginBottom: '5px' }}>Qty:</label>
+        <input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} min="1" style={{ width: '70px' }} />
+      </div>
 
-        <div>
-          <label style={{ display: 'block', fontSize: '0.8em' }}>Location:</label>
-          <input type="text" value={location} onChange={e => setLocation(e.target.value)} placeholder="Bin A1" style={{ width: '80px', padding: '5px' }} />
-        </div>
+      <div>
+        <label style={{ display: 'block', fontSize: '0.8em', color: 'var(--text-muted)', marginBottom: '5px' }}>Location:</label>
+        <input type="text" value={location} onChange={e => setLocation(e.target.value)} placeholder="Bin A1" style={{ width: '90px' }} />
+      </div>
 
-        {/* FIX: Added the missing Cost input */}
-        <div>
-          <label style={{ display: 'block', fontSize: '0.8em' }}>Unit Cost ($):</label>
-          <input type="number" step="0.01" value={cost} onChange={e => setCost(e.target.value)} placeholder="0.00" style={{ width: '80px', padding: '5px' }} />
-        </div>
+      <div>
+        <label style={{ display: 'block', fontSize: '0.8em', color: 'var(--text-muted)', marginBottom: '5px' }}>Unit Cost ($):</label>
+        <input type="number" step="0.01" value={cost} onChange={e => setCost(e.target.value)} placeholder="0.00" style={{ width: '90px' }} />
+      </div>
 
-        <button type="submit" style={{ backgroundColor: '#007bff', color: 'white', padding: '6px 15px', border: 'none', cursor: 'pointer', height: '30px' }}>
-          Add Item
-        </button>
-      </form>
-    </div>
+      <button type="submit" className="btn-success">+ Add</button>
+    </form>
   );
 }
 

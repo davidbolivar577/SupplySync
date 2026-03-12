@@ -8,7 +8,6 @@ function EditItemForm({ item, onUpdateSuccess, onCancel }) {
   const [location, setLocation] = useState('');
   const [cost, setCost] = useState('');
 
-  // When the component loads, or the 'item' changes, pre-fill the form!
   useEffect(() => {
     if (item) {
       setName(item.name || '');
@@ -21,17 +20,10 @@ function EditItemForm({ item, onUpdateSuccess, onCancel }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-
     const parsedCost = cost ? parseFloat(cost) : null;
     const parsedQty = quantity ? parseInt(quantity, 10) : 0;
 
-    const updatedItem = { 
-      name, 
-      category, 
-      quantity: parsedQty, 
-      location, 
-      unit_cost: parsedCost 
-    };
+    const updatedItem = { name, category, quantity: parsedQty, location, unit_cost: parsedCost };
 
     fetch(`${API_BASE_URL}/inventory/${item.id}`, {
       method: 'PUT',
@@ -39,57 +31,48 @@ function EditItemForm({ item, onUpdateSuccess, onCancel }) {
       body: JSON.stringify(updatedItem)
     })
     .then(res => {
-      if (res.ok) {
-        alert('Item Updated Successfully!');
-        onUpdateSuccess(); // Refresh table and close edit mode
-      } else {
-        alert('Backend rejected the update.');
-      }
-    });
+      if (res.ok) onUpdateSuccess();
+      else alert('Failed to update item.');
+    })
+    .catch(err => console.error("Error updating:", err));
   };
 
   return (
-    <div style={{ border: '2px solid #ffc107', padding: '15px', borderRadius: '8px', marginBottom: '20px', backgroundColor: '#fffdf6' }}>
-      <h3>✏️ Edit Item: {item.name}</h3>
-      <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        
-        <div>
-          <label style={{ display: 'block', fontSize: '0.8em' }}>Name:</label>
-          <input type="text" value={name} onChange={e => setName(e.target.value)} required style={{ padding: '5px' }} />
-        </div>
+    <form onSubmit={handleSubmit} style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', alignItems: 'flex-end' }}>
+      <div style={{ flex: '1', minWidth: '150px' }}>
+        <label style={{ display: 'block', fontSize: '0.8em', color: 'var(--text-muted)', marginBottom: '5px' }}>Name:</label>
+        <input type="text" value={name} onChange={e => setName(e.target.value)} required style={{ width: '100%' }} />
+      </div>
 
-        <div>
-          <label style={{ display: 'block', fontSize: '0.8em' }}>Category:</label>
-          <select value={category} onChange={e => setCategory(e.target.value)} style={{ padding: '5px' }}>
-            <option value="TOOL">Tool</option>
-            <option value="PART">Part</option>
-            <option value="MATERIAL">Material</option>
-          </select>
-        </div>
+      <div>
+        <label style={{ display: 'block', fontSize: '0.8em', color: 'var(--text-muted)', marginBottom: '5px' }}>Category:</label>
+        <select value={category} onChange={e => setCategory(e.target.value)}>
+          <option value="TOOL">Tool</option>
+          <option value="PART">Part</option>
+          <option value="MATERIAL">Material</option>
+        </select>
+      </div>
 
-        <div>
-          <label style={{ display: 'block', fontSize: '0.8em' }}>Total Qty:</label>
-          <input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} min="0" style={{ width: '60px', padding: '5px' }} />
-        </div>
+      <div>
+        <label style={{ display: 'block', fontSize: '0.8em', color: 'var(--text-muted)', marginBottom: '5px' }}>Total Qty:</label>
+        <input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} min="0" style={{ width: '70px' }} />
+      </div>
 
-        <div>
-          <label style={{ display: 'block', fontSize: '0.8em' }}>Location:</label>
-          <input type="text" value={location} onChange={e => setLocation(e.target.value)} style={{ width: '80px', padding: '5px' }} />
-        </div>
+      <div>
+        <label style={{ display: 'block', fontSize: '0.8em', color: 'var(--text-muted)', marginBottom: '5px' }}>Location:</label>
+        <input type="text" value={location} onChange={e => setLocation(e.target.value)} style={{ width: '90px' }} />
+      </div>
 
-        <div>
-          <label style={{ display: 'block', fontSize: '0.8em' }}>Unit Cost ($):</label>
-          <input type="number" step="0.01" value={cost} onChange={e => setCost(e.target.value)} style={{ width: '80px', padding: '5px' }} />
-        </div>
+      <div>
+        <label style={{ display: 'block', fontSize: '0.8em', color: 'var(--text-muted)', marginBottom: '5px' }}>Unit Cost ($):</label>
+        <input type="number" step="0.01" value={cost} onChange={e => setCost(e.target.value)} style={{ width: '90px' }} />
+      </div>
 
-        <button type="submit" style={{ backgroundColor: '#ffc107', color: 'black', padding: '6px 15px', border: 'none', cursor: 'pointer', height: '30px', fontWeight: 'bold' }}>
-          Save Changes
-        </button>
-        <button type="button" onClick={onCancel} style={{ backgroundColor: '#6c757d', color: 'white', padding: '6px 15px', border: 'none', cursor: 'pointer', height: '30px' }}>
-          Cancel
-        </button>
-      </form>
-    </div>
+      <div style={{ display: 'flex', gap: '10px' }}>
+        <button type="submit" className="btn-warning">Save</button>
+        <button type="button" onClick={onCancel} className="btn-outline">Cancel</button>
+      </div>
+    </form>
   );
 }
 

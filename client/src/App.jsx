@@ -4,7 +4,6 @@ import AdminTools from './AdminTools';
 import DetailedSearch from './DetailedSearch';
 
 function App() {
-  // Define the base URL using the environment variable
   const API_BASE_URL = import.meta.env.VITE_API_URL;
   const [inventory, setInventory] = useState([]);
   const [history, setHistory] = useState([]);
@@ -17,10 +16,24 @@ function App() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-
   const [itemQuantities, setItemQuantities] = useState({});
 
-  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' or 'reports'
+  const [currentView, setCurrentView] = useState('dashboard'); 
+
+  // --- NEW: THEME SYSTEM ---
+  // Load saved theme from localStorage, or default to dark mode
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
+
+  useEffect(() => {
+    // This applies the theme to the entire HTML document
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
+  };
+  // -------------------------
 
   const fetchAllData = () => {
     fetch(`${API_BASE_URL}/inventory`).then(res => res.json()).then(setInventory);
@@ -29,102 +42,71 @@ function App() {
     fetch(`${API_BASE_URL}/projects`).then(res => res.json()).then(setProjects);
   };
 
-  const handleDeleteItem = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to delete ${name}?`)) return;
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/inventory/${id}`, {
-        method: 'DELETE',
-      });
-      
-      if (response.ok) {
-        fetchAllData(); // Instantly refresh the table to hide the deleted item
-      } else {
-        alert("Failed to delete item.");
-      }
-    } catch (error) {
-      console.error("Error deleting item:", error);
-    }
-  };
-
   useEffect(() => {
     fetchAllData();
   }, []);
 
   const getAvailableQty = (item) => {
-    const pendingCheckouts = actionQueue
-      .filter(action => action.item.id === item.id && action.type === 'checkout')
-      .reduce((total, action) => total + action.qty, 0); // Sum up the bulk quantities
-    return item.quantity - pendingCheckouts;
+    const queuedCheckouts = actionQueue.filter(a => a.item.id === item.id && a.type === 'checkout').reduce((sum, a) => sum + a.qty, 0);
+    const queuedReturns = actionQueue.filter(a => a.item.id === item.id && a.type === 'return').reduce((sum, a) => sum + a.qty, 0);
+    return item.quantity - queuedCheckouts + queuedReturns;
   };
 
-  const handleAddToQueue = (actionType, item) => {
+  const handleAddToQueue = (type, item) => {
     if (!selectedContractor || !selectedProject) {
-      alert('⚠️ Please select a Contractor and a Project first!');
+      alert("Please select a Contractor and Project first!");
       return;
     }
+    const qtyInput = parseInt(itemQuantities[item.id]) || 1;
+    const available = getAvailableQty(item);
 
-    // Get the quantity they typed, or default to 1
-    const qtyToProcess = parseInt(itemQuantities[item.id] || 1, 10);
-
-    if (actionType === 'checkout' && getAvailableQty(item) < qtyToProcess) {
-      alert(`⚠️ You cannot checkout ${qtyToProcess} of ${item.name}. Not enough available!`);
+    if (type === 'checkout' && qtyInput > available) {
+      alert(`Cannot checkout ${qtyInput}. Only ${available} available.`);
       return;
     }
-
-    const contractorName = contractors.find(c => c.id == selectedContractor)?.first_name || 'Unknown';
-    const projectName = projects.find(p => p.id == selectedProject)?.name || 'Unknown';
 
     const newAction = {
       id: Date.now(),
-      type: actionType,
-      item: item,
-      contractorId: selectedContractor,
-      contractorName: contractorName,
-      projectId: selectedProject,
-      projectName: projectName,
-      qty: qtyToProcess // Save the quantity to the queue!
+      type,
+      item,
+      qty: qtyInput,
+      contractorName: selectedContractor,
+      projectName: selectedProject
     };
 
     setActionQueue([...actionQueue, newAction]);
-
-    // Optional: Reset the input box back to 1 after adding to queue
     setItemQuantities({ ...itemQuantities, [item.id]: 1 });
   };
 
-  const handleRemoveFromQueue = (queueId) => {
-    setActionQueue(actionQueue.filter(q => q.id !== queueId));
+  const handleRemoveFromQueue = (actionId) => {
+    setActionQueue(actionQueue.filter(a => a.id !== actionId));
   };
 
   const handleSubmitQueue = async () => {
     if (actionQueue.length === 0) return;
     try {
-      await Promise.all(actionQueue.map(async (action) => {
-        const res = await fetch(`${API_BASE_URL}/${action.type}`, {
+      for (const action of actionQueue) {
+        const contractorId = contractors.find(c => `${c.first_name} ${c.last_name}` === action.contractorName)?.id;
+        const projectId = projects.find(p => p.name === action.projectName)?.id;
+        
+        await fetch(`${API_BASE_URL}/transactions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            inventoryId: action.item.id,
-            contractorId: action.contractorId,
-            projectId: action.projectId,
-            quantityChanged: action.qty // Send to backend!
+            inventory_id: action.item.id,
+            contractor_id: contractorId,
+            project_id: projectId,
+            action_type: action.type === 'checkout' ? 'CHECK_OUT' : 'RETURN',
+            quantity: action.qty
           })
         });
-
-        // If the backend sends an error status (like 500), force it to throw!
-        if (!res.ok) {
-          throw new Error(`Backend rejected the ${action.type} request.`);
-        }
-      }));
-
-      // If we make it here, every single request was 100% successful
-      alert('✅ All changes submitted successfully!');
+      }
+      alert("All actions recorded successfully!");
       setActionQueue([]);
       fetchAllData();
-
     } catch (error) {
-      console.error("Error processing queue:", error);
-      alert('❌ Something went wrong submitting the queue. Check the database logs.');
+      console.error("Error submitting queue:", error);
+      alert("An error occurred. Please check the console.");
     }
   };
 
@@ -134,242 +116,156 @@ function App() {
     return matchesSearch && matchesCategory;
   });
 
-  // UPDATED: Streamlined minute-based grouping for history
-  const groupedHistory = Object.values(history.reduce((acc, log) => {
-    const date = new Date(log.timestamp);
-    const timeString = `${date.toLocaleDateString()} at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    const actionName = log.action_type === 'CHECK_OUT' ? 'Checked Out' : 'Returned';
-    const contractorName = `${log.first_name} ${log.last_name}`;
-
-    // Unique key for the transaction session
-    const groupKey = `${contractorName}-${actionName}-${timeString}`;
-
-    if (!acc[groupKey]) {
-      acc[groupKey] = {
-        id: groupKey,
-        contractor: contractorName,
-        action: actionName,
-        time: timeString,
-        items: []
-      };
-    }
-
-    acc[groupKey].items.push({
-      id: log.id,
-      name: log.item,
-      qty: log.quantity_changed || 1
-    });
-
-    return acc;
-  }, {}));
-
   return (
-    <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif', maxWidth: '1200px', margin: '0 auto' }}>
+    <div className="app-container">
       
-      {/* NEW: TOP NAVIGATION BAR */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #333', paddingBottom: '10px', marginBottom: '20px' }}>
-        <h1 style={{ margin: 0 }}>SupplySync</h1>
-        <div>
-          <button 
-            onClick={() => setCurrentView('dashboard')} 
-            style={{ padding: '10px 20px', fontSize: '1em', cursor: 'pointer', border: 'none', backgroundColor: currentView === 'dashboard' ? '#007bff' : '#e9ecef', color: currentView === 'dashboard' ? 'white' : 'black', borderRadius: '4px 0 0 4px' }}
-          >
-            Dashboard
+      {/* TOP NAVIGATION BAR */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid var(--border-color)', paddingBottom: '15px', marginBottom: '25px' }}>
+        <h1 style={{ margin: 0, color: 'var(--primary)' }}>SupplySync</h1>
+        
+        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+          {/* THEME TOGGLE BUTTON */}
+          <button onClick={toggleTheme} className="btn-outline" style={{ padding: '8px 12px', fontSize: '1.2rem' }} title="Toggle Light/Dark Mode">
+            {theme === 'light' ? '🌙' : '☀️'}
           </button>
-          <button 
-            onClick={() => setCurrentView('reports')} 
-            style={{ padding: '10px 20px', fontSize: '1em', cursor: 'pointer', border: 'none', backgroundColor: currentView === 'reports' ? '#007bff' : '#e9ecef', color: currentView === 'reports' ? 'white' : 'black', borderRadius: '0 4px 4px 0' }}
-          >
-            Detailed Reports
-          </button>
+
+          <div style={{ display: 'flex' }}>
+            <button 
+              onClick={() => setCurrentView('dashboard')} 
+              className={currentView === 'dashboard' ? 'btn-primary' : 'btn-outline'}
+              style={{ borderRadius: '6px 0 0 6px', borderRight: 'none' }}
+            >
+              Dashboard
+            </button>
+            <button 
+              onClick={() => setCurrentView('reports')} 
+              className={currentView === 'reports' ? 'btn-primary' : 'btn-outline'}
+              style={{ borderRadius: '0 6px 6px 0' }}
+            >
+              Detailed Reports
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* CONDITIONAL RENDERING: Show Dashboard OR Reports */}
       {currentView === 'dashboard' ? (
         <>
           {/* SELECTION BAR */}
-          <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#e9ecef', borderRadius: '5px' }}>
-            <h3>1. Select Who & Where:</h3>
-            {/* ... Keep all your existing selection bar and flexbox columns ... */}
-        <label style={{ marginRight: '10px' }}>Contractor:</label>
-        <select value={selectedContractor} onChange={(e) => setSelectedContractor(e.target.value)} style={{ padding: '5px', marginRight: '20px' }}>
-          <option value="">-- Select Person --</option>
-          {contractors.map(c => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)}
-        </select>
-        <label style={{ marginRight: '10px' }}>Project:</label>
-        <select value={selectedProject} onChange={(e) => setSelectedProject(e.target.value)} style={{ padding: '5px', marginRight: '20px' }}>
-          <option value="">-- Select Project --</option>
-          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-      </div>
-
-      {/* FLEXBOX TWO-COLUMN LAYOUT START */}
-      <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
-
-       {/* --- LEFT COLUMN --- */}
-        <div style={{ flex: '7', minWidth: 0 }}>
-          <h2>📦 Inventory</h2>
-
-          <AddItemForm onAddSuccess={fetchAllData} />
-
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-            <input
-              type="text"
-              placeholder="🔍 Search items by name..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ padding: '8px', flex: '1', borderRadius: '4px', border: '1px solid #ccc' }}
-            />
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-            >
-              <option value="">All Categories</option>
-              <option value="TOOL">Tools</option>
-              <option value="PART">Parts</option>
-              <option value="MATERIAL">Materials</option>
+          <div className="card" style={{ marginBottom: '25px', display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, border: 'none', padding: 0 }}>1. Select Job Details:</h3>
+            <select value={selectedContractor} onChange={(e) => setSelectedContractor(e.target.value)} style={{ flex: 1, minWidth: '200px' }}>
+              <option value="">-- Select Contractor --</option>
+              {contractors.map(c => <option key={c.id} value={`${c.first_name} ${c.last_name}`}>{c.first_name} {c.last_name}</option>)}
+            </select>
+            <select value={selectedProject} onChange={(e) => setSelectedProject(e.target.value)} style={{ flex: 1, minWidth: '200px' }}>
+              <option value="">-- Select Project --</option>
+              {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
             </select>
           </div>
 
-          <table border="1" cellPadding="10" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '40px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f2f2f2' }}>
-                <th>Item</th>
-                <th>Qty (Available)</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredInventory.map((item) => {
-                const available = getAvailableQty(item);
-                const isOutOfStock = available <= 0;
-                return (
-                  <tr key={item.id} style={{ opacity: isOutOfStock ? 0.6 : 1 }}>
-                    <td>{item.name}</td>
-                    <td style={{ fontWeight: 'bold' }}>{item.quantity} <span style={{ color: '#007bff', fontWeight: 'normal' }}>(Avail: {available})</span></td>
-                    <td>{item.status}</td>
-                    <td>
-                      {/* Edit button has been removed from here! */}
-                      
-                      <input
-                        type="number"
-                        min="1"
-                        max={available}
-                        value={itemQuantities[item.id] || 1}
-                        onChange={(e) => setItemQuantities({ ...itemQuantities, [item.id]: e.target.value })}
-                        style={{ width: '50px', padding: '4px', marginRight: '5px' }}
-                      />
+          {/* TWO-COLUMN LAYOUT */}
+          <div style={{ display: 'flex', gap: '25px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            
+            {/* LEFT COLUMN */}
+            <div className="card" style={{ flex: '7', minWidth: '400px' }}>
+              <h2>📦 Inventory</h2>
 
-                      <button onClick={() => handleAddToQueue('checkout', item)} disabled={isOutOfStock} style={{ backgroundColor: isOutOfStock ? '#ccc' : '#ff4d4d', color: 'white', marginRight: '5px', padding: '5px 10px', border: 'none', cursor: isOutOfStock ? 'not-allowed' : 'pointer' }}>Out</button>
-                      <button onClick={() => handleAddToQueue('return', item)} style={{ backgroundColor: '#28a745', color: 'white', padding: '5px 10px', border: 'none', cursor: 'pointer' }}>In</button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filteredInventory.length === 0 && (
-                <tr><td colSpan="4" style={{ textAlign: 'center', color: '#777' }}>No items found.</td></tr>
+              <AddItemForm onAddSuccess={fetchAllData} />
+
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                <input 
+                  type="text" 
+                  placeholder="🔍 Search items..." 
+                  value={searchTerm} 
+                  onChange={(e) => setSearchTerm(e.target.value)} 
+                  style={{ flex: '1' }}
+                />
+                <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+                  <option value="">All Categories</option>
+                  <option value="TOOL">Tools</option>
+                  <option value="PART">Parts</option>
+                  <option value="MATERIAL">Materials</option>
+                </select>
+              </div>
+
+              <div style={{ overflowX: 'auto' }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Quantity</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredInventory.map((item) => {
+                      const available = getAvailableQty(item);
+                      const isOutOfStock = available <= 0;
+                      return (
+                        <tr key={item.id} style={{ opacity: isOutOfStock ? 0.6 : 1 }}>
+                          <td>{item.name}</td>
+                          <td style={{ fontWeight: 'bold' }}>{item.quantity} <span style={{ color: 'var(--primary)', fontWeight: 'normal' }}>(Avail: {available})</span></td>
+                          <td>{item.status}</td>
+                          <td style={{ display: 'flex', gap: '5px' }}>
+                            <input
+                              type="number"
+                              min="1"
+                              max={available}
+                              value={itemQuantities[item.id] || 1}
+                              onChange={(e) => setItemQuantities({ ...itemQuantities, [item.id]: e.target.value })}
+                              style={{ width: '60px' }}
+                            />
+                            <button onClick={() => handleAddToQueue('checkout', item)} disabled={isOutOfStock} className={isOutOfStock ? 'btn-outline' : 'btn-danger'}>Out</button>
+                            <button onClick={() => handleAddToQueue('return', item)} className="btn-success">In</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* RIGHT COLUMN */}
+            <div className="card" style={{ flex: '3', minWidth: '300px' }}>
+              <h2>🛒 Pending Actions</h2>
+              {actionQueue.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)' }}>No items queued. Select a contractor and project, then check items in/out.</p>
+              ) : (
+                <>
+                  <ul style={{ listStyle: 'none', padding: 0, marginBottom: '20px' }}>
+                    {actionQueue.map(action => (
+                      <li key={action.id} style={{ padding: '15px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-surface)', borderRadius: '6px', marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <strong style={{ color: action.type === 'checkout' ? 'var(--danger)' : 'var(--success)' }}>
+                            {action.type === 'checkout' ? '📉 Checkout' : '📈 Return'}
+                          </strong>
+                          <button onClick={() => handleRemoveFromQueue(action.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', fontSize: '1.2rem', padding: 0 }}>×</button>
+                        </div>
+                        <div>Item: {action.item.name} <strong style={{ color: 'var(--primary)' }}>(Qty: {action.qty})</strong></div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.9em', marginTop: '5px' }}>For: {action.contractorName}</div>
+                      </li>
+                    ))}
+                  </ul>
+                  <button onClick={handleSubmitQueue} className="btn-primary" style={{ width: '100%', padding: '12px', fontSize: '1.1rem' }}>
+                    Submit All Changes
+                  </button>
+                </>
               )}
-            </tbody>
-          </table>
+            </div>
 
-          {/* UPDATED: Clean Card-Based Recent Activity */}
-          <h2>🕒 Recent Activity</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '40px' }}>
-            {groupedHistory.length === 0 ? (
-              <p style={{ color: '#777', fontStyle: 'italic' }}>No recent activity.</p>
-            ) : (
-              groupedHistory.map((group) => {
-                const isCheckout = group.action === 'Checked Out';
-                return (
-                  <div key={group.id} style={{ 
-                    borderLeft: `5px solid ${isCheckout ? '#ff4d4d' : '#28a745'}`, 
-                    backgroundColor: '#fff', 
-                    padding: '15px', 
-                    borderRadius: '6px', 
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                    border: '1px solid #eaeaea',
-                    borderLeftWidth: '5px' 
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid #eee', paddingBottom: '8px' }}>
-                      <span style={{ fontSize: '0.9em', color: '#666' }}>{group.time}</span>
-                      <strong style={{ color: isCheckout ? '#d93025' : '#1e8e3e' }}>
-                        {isCheckout ? '📉' : '📈'} {group.action}
-                      </strong>
-                    </div>
-                    
-                    <div style={{ marginBottom: '8px', fontSize: '1.05em' }}>
-                      <strong>{group.contractor}</strong> processed:
-                    </div>
-                    
-                    <ul style={{ listStyleType: 'none', paddingLeft: '10px', margin: 0 }}>
-                      {group.items.map(item => (
-                        <li key={item.id} style={{ padding: '4px 0', fontSize: '0.95em', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ 
-                            backgroundColor: '#f1f3f4', 
-                            padding: '2px 8px', 
-                            borderRadius: '12px', 
-                            fontSize: '0.85em', 
-                            fontWeight: 'bold',
-                            color: '#333'
-                          }}>
-                            {item.qty}x
-                          </span> 
-                          {item.name}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                );
-              })
-            )}
           </div>
-        </div>
-        {/* --- END LEFT COLUMN --- */}
-
-        {/* --- RIGHT COLUMN --- */}
-        <div style={{ flex: '3', minWidth: 0, border: '2px solid #333', borderRadius: '8px', padding: '15px', backgroundColor: '#fff', position: 'sticky', top: '20px' }}>
-          <h2 style={{ marginTop: 0 }}>🛒 Pending Changes</h2>
-          {actionQueue.length === 0 ? (
-            <p style={{ color: '#777', fontStyle: 'italic' }}>Your queue is empty. Click 'Out' or 'In' on an item to stage it here.</p>
-          ) : (
-            <>
-              <ul style={{ listStyle: 'none', padding: 0, marginBottom: '20px' }}>
-                {actionQueue.map(action => (
-                  <li key={action.id} style={{ padding: '10px', borderBottom: '1px solid #eee', fontSize: '0.9em' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong>{action.type === 'checkout' ? '📉 Checkout' : '📈 Return'}</strong>
-                      <button onClick={() => handleRemoveFromQueue(action.id)} style={{ background: 'none', border: 'none', color: 'red', cursor: 'pointer', fontSize: '1.2em' }}>×</button>
-                    </div>
-                    <div>Item: {action.item.name} <strong style={{ color: '#007bff' }}>(Qty: {action.qty})</strong></div>
-                    <div style={{ color: '#666' }}>For: {action.contractorName}</div>
-                  </li>
-                ))}
-              </ul>
-              <button onClick={handleSubmitQueue} style={{ width: '100%', padding: '12px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px', fontSize: '1em', fontWeight: 'bold', cursor: 'pointer' }}>
-                Submit All Changes
-              </button>
-            </>
-          )}
-        </div>
-        {/* --- END RIGHT COLUMN --- */}
-
-      </div>
-      {/* FLEXBOX TWO-COLUMN LAYOUT END */}
-      
         </>
       ) : (
-        /* RENDER THE NEW PAGE INSTEAD */
         <DetailedSearch 
           API_BASE_URL={API_BASE_URL} 
+          inventory={inventory}
           contractors={contractors} 
           projects={projects} 
         />
       )}
 
-      {/* ADMIN TOOLS GOES HERE, BELOW EVERYTHING */}
       <AdminTools 
         API_BASE_URL={API_BASE_URL} 
         inventory={inventory}
