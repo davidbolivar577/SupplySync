@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import AddItemForm from './AddItemForm';
-import EditItemForm from './EditItemForm';
 import AdminTools from './AdminTools';
+import DetailedSearch from './DetailedSearch';
 
 function App() {
   // Define the base URL using the environment variable
@@ -17,15 +17,34 @@ function App() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-  const [editingItem, setEditingItem] = useState(null);
 
   const [itemQuantities, setItemQuantities] = useState({});
+
+  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' or 'reports'
 
   const fetchAllData = () => {
     fetch(`${API_BASE_URL}/inventory`).then(res => res.json()).then(setInventory);
     fetch(`${API_BASE_URL}/transactions`).then(res => res.json()).then(setHistory);
     fetch(`${API_BASE_URL}/contractors`).then(res => res.json()).then(setContractors);
     fetch(`${API_BASE_URL}/projects`).then(res => res.json()).then(setProjects);
+  };
+
+  const handleDeleteItem = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to delete ${name}?`)) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/inventory/${id}`, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        fetchAllData(); // Instantly refresh the table to hide the deleted item
+      } else {
+        alert("Failed to delete item.");
+      }
+    } catch (error) {
+      console.error("Error deleting item:", error);
+    }
   };
 
   useEffect(() => {
@@ -146,11 +165,33 @@ function App() {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif', maxWidth: '1200px', margin: '0 auto' }}>
-      <h1>SupplySync Dashboard</h1>
+      
+      {/* NEW: TOP NAVIGATION BAR */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #333', paddingBottom: '10px', marginBottom: '20px' }}>
+        <h1 style={{ margin: 0 }}>SupplySync</h1>
+        <div>
+          <button 
+            onClick={() => setCurrentView('dashboard')} 
+            style={{ padding: '10px 20px', fontSize: '1em', cursor: 'pointer', border: 'none', backgroundColor: currentView === 'dashboard' ? '#007bff' : '#e9ecef', color: currentView === 'dashboard' ? 'white' : 'black', borderRadius: '4px 0 0 4px' }}
+          >
+            Dashboard
+          </button>
+          <button 
+            onClick={() => setCurrentView('reports')} 
+            style={{ padding: '10px 20px', fontSize: '1em', cursor: 'pointer', border: 'none', backgroundColor: currentView === 'reports' ? '#007bff' : '#e9ecef', color: currentView === 'reports' ? 'white' : 'black', borderRadius: '0 4px 4px 0' }}
+          >
+            Detailed Reports
+          </button>
+        </div>
+      </div>
 
-      {/* SELECTION BAR */}
-      <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#e9ecef', borderRadius: '5px' }}>
-        <h3>1. Select Who & Where:</h3>
+      {/* CONDITIONAL RENDERING: Show Dashboard OR Reports */}
+      {currentView === 'dashboard' ? (
+        <>
+          {/* SELECTION BAR */}
+          <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#e9ecef', borderRadius: '5px' }}>
+            <h3>1. Select Who & Where:</h3>
+            {/* ... Keep all your existing selection bar and flexbox columns ... */}
         <label style={{ marginRight: '10px' }}>Contractor:</label>
         <select value={selectedContractor} onChange={(e) => setSelectedContractor(e.target.value)} style={{ padding: '5px', marginRight: '20px' }}>
           <option value="">-- Select Person --</option>
@@ -166,19 +207,11 @@ function App() {
       {/* FLEXBOX TWO-COLUMN LAYOUT START */}
       <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
 
-        {/* --- LEFT COLUMN --- */}
+       {/* --- LEFT COLUMN --- */}
         <div style={{ flex: '7', minWidth: 0 }}>
           <h2>📦 Inventory</h2>
 
-          {editingItem ? (
-            <EditItemForm
-              item={editingItem}
-              onUpdateSuccess={() => { setEditingItem(null); fetchAllData(); }}
-              onCancel={() => setEditingItem(null)}
-            />
-          ) : (
-            <AddItemForm onAddSuccess={fetchAllData} />
-          )}
+          <AddItemForm onAddSuccess={fetchAllData} />
 
           <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
             <input
@@ -219,13 +252,8 @@ function App() {
                     <td style={{ fontWeight: 'bold' }}>{item.quantity} <span style={{ color: '#007bff', fontWeight: 'normal' }}>(Avail: {available})</span></td>
                     <td>{item.status}</td>
                     <td>
-                      <button
-                        onClick={() => setEditingItem(item)}
-                        style={{ backgroundColor: '#ffc107', color: 'black', marginRight: '10px', padding: '5px 10px', border: 'none', cursor: 'pointer' }}
-                      >
-                        Edit
-                      </button>
-
+                      {/* Edit button has been removed from here! */}
+                      
                       <input
                         type="number"
                         min="1"
@@ -330,9 +358,25 @@ function App() {
 
       </div>
       {/* FLEXBOX TWO-COLUMN LAYOUT END */}
+      
+        </>
+      ) : (
+        /* RENDER THE NEW PAGE INSTEAD */
+        <DetailedSearch 
+          API_BASE_URL={API_BASE_URL} 
+          contractors={contractors} 
+          projects={projects} 
+        />
+      )}
 
       {/* ADMIN TOOLS GOES HERE, BELOW EVERYTHING */}
-      <AdminTools onAddSuccess={fetchAllData} />
+      <AdminTools 
+        API_BASE_URL={API_BASE_URL} 
+        inventory={inventory}
+        contractors={contractors} 
+        projects={projects} 
+        onAddSuccess={fetchAllData} 
+      />
 
     </div>
   );

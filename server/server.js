@@ -15,12 +15,10 @@ app.get('/', (req, res) => {
   res.json({ message: "SupplySync Backend is Running!" });
 });
 
-// ... (previous code)
-
-// GET ALL INVENTORY
+// GET ALL ACTIVE INVENTORY
 app.get('/inventory', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM inventory ORDER BY id ASC');
+    const result = await pool.query('SELECT * FROM inventory WHERE is_active = true ORDER BY name ASC');
     res.json(result.rows);
   } catch (err) {
     console.error(err.message);
@@ -28,9 +26,27 @@ app.get('/inventory', async (req, res) => {
   }
 });
 
-// ... (app.listen code is below this)
+// GET ALL ACTIVE CONTRACTORS
+app.get('/contractors', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM contractors WHERE is_active = true ORDER BY first_name ASC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
-// ... (Your existing /inventory route is above this)
+// GET ALL ACTIVE PROJECTS
+app.get('/projects', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM projects WHERE is_active = true ORDER BY name ASC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // POST: PROCESS A CHECKOUT (Bulk-Safe)
 app.post('/checkout', async (req, res) => {
@@ -129,21 +145,19 @@ app.get('/transactions', async (req, res) => {
   }
 });
 
-// GET: ALL CONTRACTORS (for dropdowns)
-app.get('/contractors', async (req, res) => {
+// GET ALL HISTORY (For Detailed Search / Reports)
+app.get('/history', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM contractors ORDER BY last_name ASC');
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// GET: ALL PROJECTS (for dropdowns)
-app.get('/projects', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM projects ORDER BY name ASC');
+    const query = `
+      SELECT t.id, i.name as item, c.first_name, c.last_name, p.name as project_name, 
+      t.action_type, t.quantity_changed, t.transaction_date as timestamp  
+      FROM transactions t
+      LEFT JOIN inventory i ON t.inventory_id = i.id
+      LEFT JOIN contractors c ON t.contractor_id = c.id
+      LEFT JOIN projects p ON t.project_id = p.id
+      ORDER BY t.transaction_date DESC 
+    `;
+    const result = await pool.query(query);
     res.json(result.rows);
   } catch (err) {
     console.error(err.message);
@@ -218,6 +232,96 @@ app.put('/inventory/:id', async (req, res) => {
   } catch (err) {
     console.error(err.message);
     res.status(500).json({ error: 'Failed to update item' });
+  }
+});
+
+// ==========================================
+// ADMIN TOOLS: CONTRACTORS & PROJECTS
+// ==========================================
+
+// Add a new Contractor
+app.post('/contractors', async (req, res) => {
+  try {
+    const { first_name, last_name } = req.body;
+    await pool.query('INSERT INTO contractors (first_name, last_name) VALUES ($1, $2)', [first_name, last_name]);
+    res.json({ message: 'Contractor added successfully' });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: 'Server error adding contractor' });
+  }
+});
+
+// Add a new Project
+app.post('/projects', async (req, res) => {
+  try {
+    const { name } = req.body;
+    await pool.query('INSERT INTO projects (name) VALUES ($1)', [name]);
+    res.json({ message: 'Project added successfully' });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: 'Server error adding project' });
+  }
+});
+
+// Update a Contractor
+app.put('/contractors/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { first_name, last_name } = req.body;
+    await pool.query('UPDATE contractors SET first_name = $1, last_name = $2 WHERE id = $3', [first_name, last_name, id]);
+    res.json({ message: 'Contractor updated' });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: 'Server error updating contractor' });
+  }
+});
+
+// Update a Project
+app.put('/projects/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name } = req.body;
+    await pool.query('UPDATE projects SET name = $1 WHERE id = $2', [name, id]);
+    res.json({ message: 'Project updated' });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: 'Server error updating project' });
+  }
+});
+
+// SOFT DELETE AN INVENTORY ITEM
+app.delete('/inventory/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('UPDATE inventory SET is_active = false WHERE id = $1', [id]);
+    res.json({ message: 'Item soft deleted' });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: 'Server error soft deleting item' });
+  }
+});
+
+// SOFT DELETE A CONTRACTOR
+app.delete('/contractors/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('UPDATE contractors SET is_active = false WHERE id = $1', [id]);
+    res.json({ message: 'Contractor soft deleted' });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: 'Server error soft deleting contractor' });
+  }
+});
+
+// SOFT DELETE A PROJECT
+app.delete('/projects/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('UPDATE projects SET is_active = false WHERE id = $1', [id]);
+    res.json({ message: 'Project soft deleted' });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: 'Server error soft deleting project' });
   }
 });
 
