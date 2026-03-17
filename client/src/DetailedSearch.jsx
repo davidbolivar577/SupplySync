@@ -9,9 +9,9 @@ function DetailedSearch({ API_BASE_URL, inventory, contractors, projects }) {
   // Multi-Select Array States
   const [selectedContractors, setSelectedContractors] = useState([]);
   const [selectedProjects, setSelectedProjects] = useState([]);
-  const [selectedItems, setSelectedItems] = useState([]); // <-- NEW ITEM STATE
+  const [selectedItems, setSelectedItems] = useState([]); 
 
-  // NEW: Searchable Input States
+  // Searchable Input States
   const [itemInput, setItemInput] = useState('');
   const [contractorInput, setContractorInput] = useState('');
   const [projectInput, setProjectInput] = useState('');
@@ -37,29 +37,11 @@ function DetailedSearch({ API_BASE_URL, inventory, contractors, projects }) {
   useEffect(() => {
     let results = [...historyData];
 
-    // Text Search
-    if (itemSearch) {
-      results = results.filter(row => row.item?.toLowerCase().includes(itemSearch.toLowerCase()));
-    }
-    
-    // Exact Item Filter
-    if (selectedItems.length > 0) {
-      results = results.filter(row => selectedItems.includes(row.item));
-    }
-
-    // Contractor Filter
-    if (selectedContractors.length > 0) {
-      results = results.filter(row => selectedContractors.includes(`${row.first_name} ${row.last_name}`.trim()));
-    }
-    
-    // Project Filter
-    if (selectedProjects.length > 0) {
-      results = results.filter(row => selectedProjects.includes(row.project_name));
-    }
-    
-    if (selectedAction) {
-      results = results.filter(row => row.action_type === selectedAction);
-    }
+    if (itemSearch) results = results.filter(row => row.item?.toLowerCase().includes(itemSearch.toLowerCase()));
+    if (selectedItems.length > 0) results = results.filter(row => selectedItems.includes(row.item));
+    if (selectedContractors.length > 0) results = results.filter(row => selectedContractors.includes(`${row.first_name} ${row.last_name}`.trim()));
+    if (selectedProjects.length > 0) results = results.filter(row => selectedProjects.includes(row.project_name));
+    if (selectedAction) results = results.filter(row => row.action_type === selectedAction);
     
     if (startDate) {
       const [year, month, day] = startDate.split('-');
@@ -133,19 +115,18 @@ function DetailedSearch({ API_BASE_URL, inventory, contractors, projects }) {
 
   return (
     <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2 style={{ margin: 0 }}>🔎 Detailed Search & Reports</h2>
-        <button onClick={exportToPDF} className="btn-primary">📄 Export to PDF</button>
+      <div className="detailed-header">
+        <h2 className="m-0">🔎 Detailed Search & Reports</h2>
+        <button onClick={exportToPDF} className="btn-primary w-full" style={{ maxWidth: '200px' }}>📄 Export to PDF</button>
       </div>
       
       {/* FILTER CONTROL PANEL */}
-      {/* FILTER CONTROL PANEL */}
-      <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', flexWrap: 'wrap', backgroundColor: 'var(--bg-surface)', padding: '15px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+      <div className="filter-panel">
         
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', borderRight: '1px solid var(--border-color)', paddingRight: '15px' }}>
-          <label style={{ fontSize: '0.9em', color: 'var(--text-muted)' }}>From:</label>
+        <div className="date-filter">
+          <label className="text-muted" style={{ fontSize: '0.9em' }}>From:</label>
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          <label style={{ fontSize: '0.9em', color: 'var(--text-muted)' }}>To:</label>
+          <label className="text-muted" style={{ fontSize: '0.9em' }}>To:</label>
           <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
         </div>
 
@@ -154,10 +135,8 @@ function DetailedSearch({ API_BASE_URL, inventory, contractors, projects }) {
           placeholder="🔍 Fuzzy Search..." 
           value={itemSearch} 
           onChange={(e) => setItemSearch(e.target.value)} 
-          style={{ flex: '1', minWidth: '150px' }} 
         />
 
-        {/* 1. SEARCHABLE ITEM INPUT */}
         <input 
           list="item-options" 
           placeholder="+ Add Item Filter" 
@@ -165,19 +144,16 @@ function DetailedSearch({ API_BASE_URL, inventory, contractors, projects }) {
           onChange={(e) => {
             const val = e.target.value;
             setItemInput(val);
-            // If the typed/selected value exactly matches an item, add the chip and clear the box
             if (inventory?.some(i => i.name === val) && !selectedItems.includes(val)) {
               setSelectedItems([...selectedItems, val]);
               setItemInput('');
             }
           }}
-          style={{ flex: '1', minWidth: '150px' }}
         />
         <datalist id="item-options">
           {inventory?.map(i => <option key={i.id} value={i.name} />)}
         </datalist>
 
-        {/* 2. SEARCHABLE CONTRACTOR INPUT */}
         <input 
           list="contractor-options" 
           placeholder="+ Add Contractor Filter" 
@@ -190,13 +166,11 @@ function DetailedSearch({ API_BASE_URL, inventory, contractors, projects }) {
               setContractorInput('');
             }
           }}
-          style={{ flex: '1', minWidth: '150px' }}
         />
         <datalist id="contractor-options">
           {contractors?.map(c => <option key={c.id} value={`${c.first_name} ${c.last_name}`} />)}
         </datalist>
 
-        {/* 3. SEARCHABLE PROJECT INPUT */}
         <input 
           list="project-options" 
           placeholder="+ Add Project Filter" 
@@ -209,7 +183,6 @@ function DetailedSearch({ API_BASE_URL, inventory, contractors, projects }) {
               setProjectInput('');
             }
           }}
-          style={{ flex: '1', minWidth: '150px' }}
         />
         <datalist id="project-options">
           {projects?.map(p => <option key={p.id} value={p.name} />)}
@@ -224,9 +197,9 @@ function DetailedSearch({ API_BASE_URL, inventory, contractors, projects }) {
         <button 
           onClick={() => { 
             setItemSearch(''); setSelectedItems([]); setSelectedContractors([]); setSelectedProjects([]); setSelectedAction(''); setStartDate(''); setEndDate(''); 
-            setItemInput(''); setContractorInput(''); setProjectInput(''); // Clear inputs on reset
+            setItemInput(''); setContractorInput(''); setProjectInput(''); 
           }} 
-          className="btn-outline"
+          className="btn-outline w-full"
         >
           Clear Filters
         </button>
@@ -257,8 +230,8 @@ function DetailedSearch({ API_BASE_URL, inventory, contractors, projects }) {
       )}
 
       {/* TABLE DATA */}
-      <div style={{ overflowX: 'auto', width: '100%' }}>
-        <table id="history-table">
+      <div className="table-responsive">
+        <table id="history-table" style={{ width: '100%', minWidth: '800px', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
               <th onClick={() => handleSort('timestamp')} style={{ cursor: 'pointer' }}>Date {sortConfig.key === 'timestamp' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
@@ -277,19 +250,19 @@ function DetailedSearch({ API_BASE_URL, inventory, contractors, projects }) {
                 return (
                   <tr key={row.id}>
                     <td>{dateObj.toLocaleDateString()}</td>
-                    <td style={{ color: 'var(--text-muted)', fontSize: '0.9em' }}>{dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                    <td className="text-muted" style={{ fontSize: '0.9em' }}>{dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
                     <td style={{ fontWeight: 'bold', color: row.action_type === 'CHECK_OUT' ? 'var(--danger)' : 'var(--success)' }}>
                       {row.action_type === 'CHECK_OUT' ? 'OUT' : 'IN'}
                     </td>
-                    <td>{row.item || <span style={{color: 'var(--danger)'}}>Deleted Item</span>}</td>
+                    <td>{row.item || <span className="text-danger">Deleted Item</span>}</td>
                     <td>{Math.abs(row.quantity_changed || 1)}</td> 
-                    <td>{row.first_name ? `${row.first_name} ${row.last_name}` : <span style={{color: 'var(--danger)'}}>Deleted</span>}</td>
-                    <td>{row.project_name || <span style={{color: 'var(--danger)'}}>Deleted Project</span>}</td>
+                    <td>{row.first_name ? `${row.first_name} ${row.last_name}` : <span className="text-danger">Deleted</span>}</td>
+                    <td>{row.project_name || <span className="text-danger">Deleted Project</span>}</td>
                   </tr>
                 );
               })
             ) : (
-              <tr><td colSpan="7" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>No records match your filters.</td></tr>
+              <tr><td colSpan="7" style={{ textAlign: 'center', padding: '30px' }} className="text-muted">No records match your filters.</td></tr>
             )}
           </tbody>
         </table>
