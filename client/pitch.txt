@@ -1,0 +1,7 @@
+What: A software for tracking inventory 
+Problem: Tracking tools and inventory is difficult
+Solution: All in one solution for keeping track of what is used where, and by who
+Why: Better auditing and inventory management
+Who: Small business owners
+Differentiators: Especially useful for smaller scale businesses where larger software is too clunky
+Impact:
