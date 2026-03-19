@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import AdminTools from './AdminTools';
-import DetailedSearch from './DetailedSearch';
+import AdminTools from './components/AdminTools';
+import DetailedSearch from './components/DetailedSearch';
+import Login from './components/Login';
 
 function App() {
   const API_BASE_URL = import.meta.env.VITE_API_URL;
@@ -11,12 +12,13 @@ function App() {
   const [selectedContractor, setSelectedContractor] = useState('');
   const [selectedProject, setSelectedProject] = useState('');
   const [actionQueue, setActionQueue] = useState([]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [itemQuantities, setItemQuantities] = useState({});
 
-  const [currentView, setCurrentView] = useState('dashboard'); 
+  const [currentView, setCurrentView] = useState('dashboard');
 
   // Load saved theme from localStorage, or default to dark mode
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
@@ -59,7 +61,7 @@ function App() {
       ? selectedContractor : "Unknown Contractor";
 
     const newAction = {
-      id: Date.now(), 
+      id: Date.now(),
       item,
       type,
       qty: parseInt(qtyInput, 10),
@@ -68,7 +70,7 @@ function App() {
     };
 
     setActionQueue([...actionQueue, newAction]);
-    setItemQuantities(prev => ({ ...prev, [item.id]: '' })); 
+    setItemQuantities(prev => ({ ...prev, [item.id]: '' }));
   };
 
   const handleRemoveFromQueue = (actionId) => {
@@ -110,28 +112,32 @@ function App() {
     return matchesSearch && matchesCategory;
   });
 
+  if (!isAuthenticated) {
+    return <Login setAuth={setIsAuthenticated} />;
+  }
+
   return (
     <div className="app-container">
-      
+
       {/* TOP NAVIGATION BAR */}
       <div className="app-header">
         <h1 className="m-0 text-primary">SupplySync</h1>
-        
+
         <div className="header-actions">
           <button onClick={toggleTheme} className="btn-outline" title="Toggle Light/Dark Mode">
             {theme === 'light' ? '🌙' : '☀️'}
           </button>
 
           <div style={{ display: 'flex' }}>
-            <button 
-              onClick={() => setCurrentView('dashboard')} 
+            <button
+              onClick={() => setCurrentView('dashboard')}
               className={currentView === 'dashboard' ? 'btn-primary' : 'btn-outline'}
               style={{ borderRadius: '6px 0 0 6px', borderRight: 'none' }}
             >
               Dashboard
             </button>
-            <button 
-              onClick={() => setCurrentView('reports')} 
+            <button
+              onClick={() => setCurrentView('reports')}
               className={currentView === 'reports' ? 'btn-primary' : 'btn-outline'}
               style={{ borderRadius: '0 6px 6px 0' }}
             >
@@ -158,17 +164,17 @@ function App() {
 
           {/* TWO-COLUMN LAYOUT */}
           <div className="layout-grid">
-            
+
             {/* LEFT COLUMN: INVENTORY */}
             <div className="card col-main">
               <h2 className="m-0 mb-15">2. Find Items</h2>
-              
+
               <div className="controls-bar">
-                <input 
-                  type="text" 
-                  placeholder="🔍 Search items..." 
-                  value={searchTerm} 
-                  onChange={(e) => setSearchTerm(e.target.value)} 
+                <input
+                  type="text"
+                  placeholder="🔍 Search items..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
                 />
                 <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
                   <option value="">All Categories</option>
@@ -203,13 +209,13 @@ function App() {
                         </td>
                         <td className="text-muted">{item.location}</td>
                         <td>
-                          <input 
-                            type="number" 
-                            min="1" 
-                            value={itemQuantities[item.id] || ''} 
-                            onChange={(e) => setItemQuantities({...itemQuantities, [item.id]: e.target.value})}
+                          <input
+                            type="number"
+                            min="1"
+                            value={itemQuantities[item.id] || ''}
+                            onChange={(e) => setItemQuantities({ ...itemQuantities, [item.id]: e.target.value })}
                             placeholder="1"
-                            style={{ width: '60px', padding: '6px' }} 
+                            style={{ width: '60px', padding: '6px' }}
                           />
                         </td>
                         <td>
@@ -235,7 +241,7 @@ function App() {
             {/* RIGHT COLUMN: PENDING ACTIONS CART */}
             <div className="card col-sidebar">
               <h2 className="m-0 mb-15">3. Pending Actions</h2>
-              
+
               {actionQueue.length === 0 ? (
                 <p className="text-muted" style={{ fontStyle: 'italic', textAlign: 'center', padding: '20px 0' }}>
                   Queue is empty. Select items to check out or return.
@@ -270,21 +276,21 @@ function App() {
           </div>
         </>
       ) : (
-        <DetailedSearch 
-          API_BASE_URL={API_BASE_URL} 
+        <DetailedSearch
+          API_BASE_URL={API_BASE_URL}
           inventory={inventory}
-          contractors={contractors} 
-          projects={projects} 
+          contractors={contractors}
+          projects={projects}
         />
       )}
 
       {/* Admin controls render below everything */}
-      <AdminTools 
-        API_BASE_URL={API_BASE_URL} 
+      <AdminTools
+        API_BASE_URL={API_BASE_URL}
         inventory={inventory}
-        contractors={contractors} 
-        projects={projects} 
-        onAddSuccess={fetchAllData} 
+        contractors={contractors}
+        projects={projects}
+        onAddSuccess={fetchAllData}
       />
 
     </div>

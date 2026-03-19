@@ -6,9 +6,80 @@ const pool = require('./db'); // Import the db connection we just verified
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+const { OAuth2Client } = require('google-auth-library');
+const jwt = require('jsonwebtoken');
+
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
 // Middleware
 app.use(cors()); // Allows the frontend to talk to this backend
 app.use(express.json()); // Allows us to read JSON data sent in requests
+
+// --- AUTHENTICATION ROUTE ---
+app.post('/api/auth/google', async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    // 1. Verify the token with Google
+    const ticket = await client.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    
+    // Extract the payload (email, google_id, etc.)
+    const payload = ticket.getPayload();
+    const email = payload.email;
+    const googleId = payload.sub;
+
+    // 2. Check the database for this email
+    const userQuery = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    
+    if (userQuery.rows.length === 0) {
+      return res.status(401).json({ error: "Access denied. You are not invited." });
+    }
+
+    const user = userQuery.rows[0];
+
+    // 3. Check for Time-Bound Expirations
+    const now = new Date();
+    if (user.access_expires_at && new Date(user.access_expires_at) < now) {
+      return res.status(403).json({ error: "Your access has expired." });
+    }
+    if (user.status === 'pending' && user.invite_expires_at && new Date(user.invite_expires_at) < now) {
+      // Lazy delete the expired invite
+      await pool.query('DELETE FROM users WHERE id = $1', [user.id]);
+      return res.status(403).json({ error: "Your invite has expired. Please contact the admin." });
+    }
+
+    // 4. If they are pending but valid, activate them!
+    if (user.status === 'pending') {
+      await pool.query(
+        'UPDATE users SET status = $1, google_id = $2, invite_expires_at = NULL, last_login = CURRENT_TIMESTAMP WHERE id = $3',
+        ['active', googleId, user.id]
+      );
+    } else {
+      // Just update last login
+      await pool.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [user.id]);
+    }
+
+    // 5. Generate your app's session token (JWT)
+    const sessionToken = jwt.sign(
+      { userId: user.id, email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' } // Token expires in 24 hours
+    );
+
+    // 6. Send the token and user data back to React
+    res.json({ 
+      token: sessionToken, 
+      user: { email: user.email, role: user.role } 
+    });
+
+  } catch (error) {
+    console.error("Auth Error:", error);
+    res.status(401).json({ error: "Invalid Google token" });
+  }
+});
 
 // 1. Basic Test Route
 app.get('/', (req, res) => {
