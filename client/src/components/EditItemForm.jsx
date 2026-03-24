@@ -25,9 +25,13 @@ function EditItemForm({ item, onUpdateSuccess, onCancel }) {
 
     const updatedItem = { name, category, quantity: parsedQty, location, unit_cost: parsedCost };
 
+    const token = localStorage.getItem('inventory_token');
     fetch(`${API_BASE_URL}/inventory/${item.id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
       body: JSON.stringify(updatedItem)
     })
     .then(res => {

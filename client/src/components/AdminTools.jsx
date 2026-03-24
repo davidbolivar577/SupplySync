@@ -21,7 +21,11 @@ function AdminTools({ API_BASE_URL, inventory, contractors, projects, onAddSucce
   const handleDeleteItem = async (id, name) => {
     if (!window.confirm(`Are you sure you want to delete ${name}?`)) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/inventory/${id}`, { method: 'DELETE' });
+      const token = localStorage.getItem('inventory_token');
+      const response = await fetch(`${API_BASE_URL}/inventory/${id}`, { 
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (response.ok) onAddSuccess(); 
       else alert("Failed to delete item.");
     } catch (error) { console.error("Error deleting item:", error); }
@@ -32,9 +36,13 @@ function AdminTools({ API_BASE_URL, inventory, contractors, projects, onAddSucce
     e.preventDefault();
     if (!newFirstName || !newLastName) return alert("Please enter both first and last name.");
     try {
+      const token = localStorage.getItem('inventory_token');
       await fetch(`${API_BASE_URL}/contractors`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ first_name: newFirstName, last_name: newLastName })
       });
       setNewFirstName(''); setNewLastName('');
@@ -45,7 +53,11 @@ function AdminTools({ API_BASE_URL, inventory, contractors, projects, onAddSucce
   const handleDeleteContractor = async (id, name) => {
     if (!window.confirm(`Are you sure you want to delete ${name}?`)) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/contractors/${id}`, { method: 'DELETE' });
+      const token = localStorage.getItem('inventory_token');
+      const response = await fetch(`${API_BASE_URL}/contractors/${id}`, { 
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       const data = await response.json();
       if (!response.ok) alert(data.error || "Failed to delete.");
       else onAddSuccess();
@@ -54,9 +66,13 @@ function AdminTools({ API_BASE_URL, inventory, contractors, projects, onAddSucce
 
   const handleUpdateContractor = async (id) => {
     try {
+      const token = localStorage.getItem('inventory_token');
       await fetch(`${API_BASE_URL}/contractors/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ first_name: editFirstName, last_name: editLastName })
       });
       setEditingContractorId(null);
@@ -65,13 +81,17 @@ function AdminTools({ API_BASE_URL, inventory, contractors, projects, onAddSucce
   };
 
   // --- PROJECT FUNCTIONS ---
-  const handleAddProject = async (e) => {
+ const handleAddProject = async (e) => {
     e.preventDefault();
     if (!newProjectName) return alert("Please enter a project name.");
     try {
+      const token = localStorage.getItem('inventory_token');
       await fetch(`${API_BASE_URL}/projects`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ name: newProjectName })
       });
       setNewProjectName('');
@@ -82,7 +102,11 @@ function AdminTools({ API_BASE_URL, inventory, contractors, projects, onAddSucce
   const handleDeleteProject = async (id, name) => {
     if (!window.confirm(`Are you sure you want to delete the project: ${name}?`)) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/projects/${id}`, { method: 'DELETE' });
+      const token = localStorage.getItem('inventory_token');
+      const response = await fetch(`${API_BASE_URL}/projects/${id}`, { 
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       const data = await response.json();
       if (!response.ok) alert(data.error || "Failed to delete.");
       else onAddSuccess();
@@ -91,9 +115,13 @@ function AdminTools({ API_BASE_URL, inventory, contractors, projects, onAddSucce
 
   const handleUpdateProject = async (id) => {
     try {
+      const token = localStorage.getItem('inventory_token');
       await fetch(`${API_BASE_URL}/projects/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ name: editProjectName })
       });
       setEditingProjectId(null);

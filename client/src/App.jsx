@@ -12,7 +12,7 @@ function App() {
   const [selectedContractor, setSelectedContractor] = useState('');
   const [selectedProject, setSelectedProject] = useState('');
   const [actionQueue, setActionQueue] = useState([]);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('inventory_token'));
 
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -33,14 +33,34 @@ function App() {
   };
 
   const fetchAllData = () => {
-    fetch(`${API_BASE_URL}/inventory`).then(res => res.json()).then(setInventory).catch(console.error);
-    fetch(`${API_BASE_URL}/contractors`).then(res => res.json()).then(setContractors).catch(console.error);
-    fetch(`${API_BASE_URL}/projects`).then(res => res.json()).then(setProjects).catch(console.error);
+    const token = localStorage.getItem('inventory_token');
+    const headers = { 'Authorization': `Bearer ${token}` };
+
+    // We added a check here: "res.ok ? res.json() : []" 
+    // If the server rejects us, default to an empty array so the app doesn't crash!
+    fetch(`${API_BASE_URL}/inventory`, { headers })
+      .then(res => res.ok ? res.json() : [])
+      .then(setInventory)
+      .catch(console.error);
+
+    fetch(`${API_BASE_URL}/contractors`, { headers })
+      .then(res => res.ok ? res.json() : [])
+      .then(setContractors)
+      .catch(console.error);
+
+    fetch(`${API_BASE_URL}/projects`, { headers })
+      .then(res => res.ok ? res.json() : [])
+      .then(setProjects)
+      .catch(console.error);
   };
 
+  // Only run the fetch when isAuthenticated changes to TRUE
   useEffect(() => {
-    fetchAllData();
-  }, [API_BASE_URL]);
+    // Only attempt to fetch data if we are actually authenticated
+    if (isAuthenticated) {
+      fetchAllData();
+    }
+  }, [isAuthenticated]);
 
   const handleQueueAction = (item, type) => {
     if (!selectedContractor || !selectedProject) {
@@ -90,10 +110,14 @@ function App() {
           action_type: action.type === 'checkout' ? 'CHECK_OUT' : 'RETURN'
         };
 
-        await fetch(`${API_BASE_URL}/transaction`, {
+        const token = localStorage.getItem('inventory_token');
+        const response = await fetch(`${API_BASE_URL}/inventory/transaction`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ transactions: payload })
         });
       }
 

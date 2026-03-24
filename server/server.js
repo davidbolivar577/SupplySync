@@ -81,13 +81,40 @@ app.post('/api/auth/google', async (req, res) => {
   }
 });
 
+// --- AUTHENTICATION MIDDLEWARE ---
+const authenticateToken = (req, res, next) => {
+  // 1. Grab the Authorization header from the incoming request
+  const authHeader = req.headers['authorization'];
+  
+  // 2. The header format is "Bearer <token>". We just want the token.
+  const token = authHeader && authHeader.split(' ')[1]; 
+
+  // 3. If there is no token at all, reject immediately
+  if (!token) {
+    return res.status(401).json({ error: "Access denied. No token provided." });
+  }
+
+  // 4. Verify the token using your secret key
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: "Invalid or expired token." });
+    }
+    
+    // 5. Token is valid! Attach the decoded user data to the request
+    req.user = user; 
+    
+    // 6. Move on to the actual route handler
+    next(); 
+  });
+};
+
 // 1. Basic Test Route
 app.get('/', (req, res) => {
   res.json({ message: "SupplySync Backend is Running!" });
 });
 
 // GET ALL ACTIVE INVENTORY
-app.get('/inventory', async (req, res) => {
+app.get('/inventory', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM inventory WHERE is_active = true ORDER BY name ASC');
     res.json(result.rows);
@@ -98,7 +125,7 @@ app.get('/inventory', async (req, res) => {
 });
 
 // GET ALL ACTIVE CONTRACTORS
-app.get('/contractors', async (req, res) => {
+app.get('/contractors', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM contractors WHERE is_active = true ORDER BY first_name ASC');
     res.json(result.rows);
@@ -109,7 +136,7 @@ app.get('/contractors', async (req, res) => {
 });
 
 // GET ALL ACTIVE PROJECTS
-app.get('/projects', async (req, res) => {
+app.get('/projects', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM projects WHERE is_active = true ORDER BY name ASC');
     res.json(result.rows);
@@ -120,7 +147,7 @@ app.get('/projects', async (req, res) => {
 });
 
 // POST: PROCESS A CHECKOUT (Bulk-Safe)
-app.post('/checkout', async (req, res) => {
+app.post('/checkout', authenticateToken, async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -161,7 +188,7 @@ app.post('/checkout', async (req, res) => {
 });
 
 // POST: PROCESS A RETURN (Bulk-Safe)
-app.post('/return', async (req, res) => {
+app.post('/return', authenticateToken, async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -197,7 +224,7 @@ app.post('/return', async (req, res) => {
 });
 
 // GET RECENT TRANSACTIONS
-app.get('/transactions', async (req, res) => {
+app.get('/transactions', authenticateToken, async (req, res) => {
   try {
     const query = `
       SELECT t.id, i.name as item, c.first_name, c.last_name, t.action_type, 
@@ -217,7 +244,7 @@ app.get('/transactions', async (req, res) => {
 });
 
 // GET ALL HISTORY (For Detailed Search / Reports)
-app.get('/history', async (req, res) => {
+app.get('/history', authenticateToken, async (req, res) => {
   try {
     const query = `
       SELECT t.id, i.name as item, c.first_name, c.last_name, p.name as project_name, 
@@ -237,7 +264,7 @@ app.get('/history', async (req, res) => {
 });
 
 // POST: ADD NEW INVENTORY ITEM
-app.post('/inventory', async (req, res) => {
+app.post('/inventory', authenticateToken, async (req, res) => {
   const { name, category, quantity, location, unit_cost } = req.body;
 
   try {
@@ -256,7 +283,7 @@ app.post('/inventory', async (req, res) => {
 });
 
 // POST: ADD NEW CONTRACTOR
-app.post('/contractors', async (req, res) => {
+app.post('/contractors', authenticateToken, async (req, res) => {
   try {
     const { first_name, last_name, phone, email } = req.body;
     const newContractor = await pool.query(
@@ -271,7 +298,7 @@ app.post('/contractors', async (req, res) => {
 });
 
 // POST: ADD NEW PROJECT
-app.post('/projects', async (req, res) => {
+app.post('/projects', authenticateToken, async (req, res) => {
   try {
     const { name, address } = req.body;
     const newProject = await pool.query(
@@ -286,7 +313,7 @@ app.post('/projects', async (req, res) => {
 });
 
 // PUT: UPDATE EXISTING INVENTORY ITEM
-app.put('/inventory/:id', async (req, res) => {
+app.put('/inventory/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, category, quantity, location, unit_cost } = req.body;
@@ -311,7 +338,7 @@ app.put('/inventory/:id', async (req, res) => {
 // ==========================================
 
 // Add a new Contractor
-app.post('/contractors', async (req, res) => {
+app.post('/contractors', authenticateToken, async (req, res) => {
   try {
     const { first_name, last_name } = req.body;
     await pool.query('INSERT INTO contractors (first_name, last_name) VALUES ($1, $2)', [first_name, last_name]);
@@ -323,7 +350,7 @@ app.post('/contractors', async (req, res) => {
 });
 
 // Add a new Project
-app.post('/projects', async (req, res) => {
+app.post('/projects', authenticateToken, async (req, res) => {
   try {
     const { name } = req.body;
     await pool.query('INSERT INTO projects (name) VALUES ($1)', [name]);
@@ -335,7 +362,7 @@ app.post('/projects', async (req, res) => {
 });
 
 // Update a Contractor
-app.put('/contractors/:id', async (req, res) => {
+app.put('/contractors/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { first_name, last_name } = req.body;
@@ -348,7 +375,7 @@ app.put('/contractors/:id', async (req, res) => {
 });
 
 // Update a Project
-app.put('/projects/:id', async (req, res) => {
+app.put('/projects/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { name } = req.body;
@@ -361,7 +388,7 @@ app.put('/projects/:id', async (req, res) => {
 });
 
 // SOFT DELETE AN INVENTORY ITEM
-app.delete('/inventory/:id', async (req, res) => {
+app.delete('/inventory/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     await pool.query('UPDATE inventory SET is_active = false WHERE id = $1', [id]);
@@ -373,7 +400,7 @@ app.delete('/inventory/:id', async (req, res) => {
 });
 
 // SOFT DELETE A CONTRACTOR
-app.delete('/contractors/:id', async (req, res) => {
+app.delete('/contractors/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     await pool.query('UPDATE contractors SET is_active = false WHERE id = $1', [id]);
@@ -385,7 +412,7 @@ app.delete('/contractors/:id', async (req, res) => {
 });
 
 // SOFT DELETE A PROJECT
-app.delete('/projects/:id', async (req, res) => {
+app.delete('/projects/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     await pool.query('UPDATE projects SET is_active = false WHERE id = $1', [id]);

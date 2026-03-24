@@ -25,7 +25,10 @@ function DetailedSearch({ API_BASE_URL, inventory, contractors, projects }) {
   const [sortConfig, setSortConfig] = useState({ key: 'timestamp', direction: 'desc' });
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/history`)
+    const token = localStorage.getItem('inventory_token');
+    fetch(`${API_BASE_URL}/history`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
       .then(res => res.json())
       .then(data => {
         setHistoryData(data);

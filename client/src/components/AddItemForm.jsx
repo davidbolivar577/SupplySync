@@ -15,9 +15,13 @@ function AddItemForm({ onAddSuccess }) {
 
     const newItem = { name, category, quantity: parsedQty, location, unit_cost: parsedCost };
 
+    const token = localStorage.getItem('inventory_token');
     fetch(`${API_BASE_URL}/inventory`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
       body: JSON.stringify(newItem)
     })
     .then(res => {
