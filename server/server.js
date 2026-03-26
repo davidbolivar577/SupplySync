@@ -11,12 +11,22 @@ const jwt = require('jsonwebtoken');
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
+const nodemailer = require('nodemailer');
+
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
+
 // Middleware
 app.use(cors()); // Allows the frontend to talk to this backend
 app.use(express.json()); // Allows us to read JSON data sent in requests
 
 // --- AUTHENTICATION ROUTE ---
-app.post('/api/auth/google', async (req, res) => {
+app.post('/auth/google', async (req, res) => {
   const { token } = req.body;
 
   try {
@@ -78,6 +88,68 @@ app.post('/api/auth/google', async (req, res) => {
   } catch (error) {
     console.error("Auth Error:", error);
     res.status(401).json({ error: "Invalid Google token" });
+  }
+});
+
+// --- REQUEST LOGIN LINK ---
+app.post('/auth/send-link', async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    // 1. Check if user exists in the database
+    const userQuery = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    if (userQuery.rows.length === 0) {
+      return res.json({ message: "If that email exists, a link was sent." }); 
+    }
+    const user = userQuery.rows[0];
+
+    // 2. Create the 15-minute token
+    const linkToken = jwt.sign(
+      { id: user.id, email: user.email, role: user.role }, 
+      process.env.JWT_SECRET, 
+      { expiresIn: '15m' }
+    );
+
+    // 3. Build the link
+    const loginLink = `${process.env.FRONTEND_URL}?link_token=${linkToken}`;
+
+    // 4. Send the email using Nodemailer
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email, // This will now send to ANY email address!
+      subject: 'Your Inventory Portal Login Link',
+      html: `<h3>Welcome back!</h3>
+             <p>Click the link below to securely log in to the portal. This link expires in 15 minutes.</p>
+             <a href="${loginLink}" style="padding:10px 20px; background:#007bff; color:white; text-decoration:none; border-radius:5px; display:inline-block; margin-top:10px;">Log In Now</a>`
+    };
+
+    await transporter.sendMail(mailOptions);
+    res.json({ message: "Login link sent!" });
+
+  } catch (err) {
+    console.error("Nodemailer Error:", err);
+    res.status(500).json({ error: "Server error sending login link." });
+  }
+});
+
+// --- VERIFY LOGIN LINK ---
+app.post('/auth/verify-link', async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: "No token provided" });
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Create the standard 24-hour session token
+    const sessionToken = jwt.sign(
+      { id: decoded.id, email: decoded.email, role: decoded.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.json({ token: sessionToken, user: { role: decoded.role } });
+  } catch (err) {
+    res.status(401).json({ error: "Login link is invalid or expired." });
   }
 });
 

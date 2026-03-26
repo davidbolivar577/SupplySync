@@ -13,6 +13,7 @@ function App() {
   const [selectedProject, setSelectedProject] = useState('');
   const [actionQueue, setActionQueue] = useState([]);
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('inventory_token'));
+  const [userRole, setUserRole] = useState(localStorage.getItem('user_role') || '');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -30,6 +31,14 @@ function App() {
 
   const toggleTheme = () => {
     setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('inventory_token');
+    localStorage.removeItem('user_role');
+    
+    setIsAuthenticated(false);
+    setUserRole('');
   };
 
   const fetchAllData = () => {
@@ -137,7 +146,7 @@ function App() {
   });
 
   if (!isAuthenticated) {
-    return <Login setAuth={setIsAuthenticated} />;
+    return <Login setAuth={setIsAuthenticated} setUserRole={setUserRole} />;
   }
 
   return (
@@ -145,29 +154,16 @@ function App() {
 
       {/* TOP NAVIGATION BAR */}
       <div className="app-header">
-        <h1 className="m-0 text-primary">SupplySync</h1>
-
+        <h1 className="m-0 text-primary">Inventory Portal</h1>
+        
         <div className="header-actions">
-          <button onClick={toggleTheme} className="btn-outline" title="Toggle Light/Dark Mode">
-            {theme === 'light' ? '🌙' : '☀️'}
+          <button onClick={toggleTheme} className="btn-secondary" style={{ padding: '8px 16px' }}>
+            {theme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode'}
           </button>
-
-          <div style={{ display: 'flex' }}>
-            <button
-              onClick={() => setCurrentView('dashboard')}
-              className={currentView === 'dashboard' ? 'btn-primary' : 'btn-outline'}
-              style={{ borderRadius: '6px 0 0 6px', borderRight: 'none' }}
-            >
-              Dashboard
-            </button>
-            <button
-              onClick={() => setCurrentView('reports')}
-              className={currentView === 'reports' ? 'btn-primary' : 'btn-outline'}
-              style={{ borderRadius: '0 6px 6px 0' }}
-            >
-              Reports
-            </button>
-          </div>
+          
+          <button onClick={handleLogout} className="btn-secondary text-danger" style={{ padding: '8px 16px', fontWeight: 'bold' }}>
+            Log Out
+          </button>
         </div>
       </div>
 
@@ -308,14 +304,16 @@ function App() {
         />
       )}
 
-      {/* Admin controls render below everything */}
-      <AdminTools
-        API_BASE_URL={API_BASE_URL}
-        inventory={inventory}
-        contractors={contractors}
-        projects={projects}
-        onAddSuccess={fetchAllData}
-      />
+      {/* Admin controls ONLY render if the user is an admin */}
+      {userRole === 'admin' && (
+        <AdminTools
+          API_BASE_URL={API_BASE_URL}
+          inventory={inventory}
+          contractors={contractors}
+          projects={projects}
+          onAddSuccess={fetchAllData}
+        />
+      )}
 
     </div>
   );
