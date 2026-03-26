@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import EditItemForm from './EditItemForm';
-import './AdminTools.css'; // <-- Import the new clean styles!
+import './AdminTools.css';
 
 function AdminTools({ API_BASE_URL, inventory, contractors, projects, onAddSuccess }) {
   const [newFirstName, setNewFirstName] = useState('');
@@ -16,6 +16,50 @@ function AdminTools({ API_BASE_URL, inventory, contractors, projects, onAddSucce
   const [editProjectName, setEditProjectName] = useState('');
 
   const [editingItem, setEditingItem] = useState(null);
+
+  // --- APP USER STATES ---
+  const [userEmail, setUserEmail] = useState('');
+  const [userRole, setUserRole] = useState('user');
+  const [userExpiration, setUserExpiration] = useState('');
+  const [userMessage, setUserMessage] = useState({ text: '', type: '' });
+
+  // --- APP USER FUNCTIONS ---
+  const handleAddUser = async (e) => {
+    e.preventDefault();
+    if (!userEmail) return alert("Please enter an email address.");
+    setUserMessage({ text: 'Adding...', type: '' });
+
+    try {
+      const token = localStorage.getItem('inventory_token');
+      const res = await fetch(`${API_BASE_URL}/users`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({
+          email: userEmail,
+          role: userRole,
+          access_expires_at: userExpiration ? userExpiration : null 
+        })
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setUserMessage({ text: data.message, type: 'success' });
+        setUserEmail('');
+        setUserRole('user');
+        setUserExpiration('');
+        // Clear success message after 3 seconds
+        setTimeout(() => setUserMessage({ text: '', type: '' }), 3000);
+      } else {
+        setUserMessage({ text: data.error, type: 'error' });
+      }
+    } catch (err) {
+      setUserMessage({ text: 'Failed to connect to server.', type: 'error' });
+    }
+  };
 
   // --- ITEM FUNCTIONS ---
   const handleDeleteItem = async (id, name) => {
@@ -81,7 +125,7 @@ function AdminTools({ API_BASE_URL, inventory, contractors, projects, onAddSucce
   };
 
   // --- PROJECT FUNCTIONS ---
- const handleAddProject = async (e) => {
+  const handleAddProject = async (e) => {
     e.preventDefault();
     if (!newProjectName) return alert("Please enter a project name.");
     try {
@@ -135,7 +179,7 @@ function AdminTools({ API_BASE_URL, inventory, contractors, projects, onAddSucce
       
       <div className="admin-grid">
 
-        {/* LEFT COLUMN: INVENTORY */}
+        {/* 1. MANAGE INVENTORY */}
         <div className="admin-card">
           <h3>Manage Inventory</h3>
           {editingItem ? (
@@ -163,7 +207,7 @@ function AdminTools({ API_BASE_URL, inventory, contractors, projects, onAddSucce
           )}
         </div>
         
-        {/* MIDDLE COLUMN: CONTRACTORS */}
+        {/* 2. MANAGE CONTRACTORS */}
         <div className="admin-card">
           <h3>Manage Contractors</h3>
           <form onSubmit={handleAddContractor} className="admin-form">
@@ -198,7 +242,7 @@ function AdminTools({ API_BASE_URL, inventory, contractors, projects, onAddSucce
           </ul>
         </div>
 
-        {/* RIGHT COLUMN: PROJECTS */}
+        {/* 3. MANAGE PROJECTS */}
         <div className="admin-card">
           <h3>Manage Projects</h3>
           <form onSubmit={handleAddProject} className="admin-form">
@@ -229,6 +273,62 @@ function AdminTools({ API_BASE_URL, inventory, contractors, projects, onAddSucce
               </li>
             ))}
           </ul>
+        </div>
+
+        {/* 4. MANAGE APP USERS (NEW) */}
+        <div className="admin-card">
+          <h3>Invite App Users</h3>
+          
+          {userMessage.text && (
+            <div style={{ 
+              marginBottom: '10px', 
+              padding: '8px', 
+              borderRadius: '4px', 
+              fontSize: '0.9rem',
+              textAlign: 'center',
+              backgroundColor: userMessage.type === 'error' ? '#fee2e2' : '#d1fae5',
+              color: userMessage.type === 'error' ? '#991b1b' : '#065f46' 
+            }}>
+              {userMessage.text}
+            </div>
+          )}
+
+          <form onSubmit={handleAddUser} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <input 
+              type="email" 
+              placeholder="tester@example.com" 
+              value={userEmail}
+              onChange={(e) => setUserEmail(e.target.value)}
+              className="admin-input"
+              required 
+            />
+            
+            {/* CHANGED: Removed the flex row, let these stack naturally */}
+            <select 
+              value={userRole} 
+              onChange={(e) => setUserRole(e.target.value)} 
+              className="admin-input" 
+            >
+              <option value="user">Standard User</option>
+              <option value="admin">Administrator</option>
+            </select>
+
+            <input 
+              type="date" 
+              value={userExpiration}
+              onChange={(e) => setUserExpiration(e.target.value)}
+              className="admin-input"
+              title="Optional: Date their access expires"
+            />
+
+            <button type="submit" className="admin-btn btn-success w-full" style={{ marginTop: '5px' }}>
+              + Approve User
+            </button>
+          </form>
+          
+          <p style={{ marginTop: '15px', fontSize: '0.85rem', color: 'gray', textAlign: 'center' }}>
+            Approved users can log in via Google or by requesting an email login link.
+          </p>
         </div>
 
       </div>

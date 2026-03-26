@@ -218,102 +218,52 @@ app.get('/projects', authenticateToken, async (req, res) => {
   }
 });
 
-// POST: PROCESS A CHECKOUT (Bulk-Safe)
-app.post('/checkout', authenticateToken, async (req, res) => {
-  const client = await pool.connect();
+const handleSubmitQueue = async () => {
+    if (actionQueue.length === 0) return;
 
-  try {
-    const { inventoryId, contractorId, projectId, quantityChanged } = req.body;
-    
-    await client.query('BEGIN');
+    const token = localStorage.getItem('inventory_token');
+    let allSuccessful = true;
 
-    // Step A: Decrease by the requested quantity
-    const updateRes = await client.query(
-      `UPDATE inventory 
-       SET quantity = quantity - $2 
-       WHERE id = $1 AND quantity >= $2 
-       RETURNING *`,
-      [inventoryId, quantityChanged]
-    );
+    // Process each item in the queue
+    for (const action of actionQueue) {
+      // 1. Dynamically pick the correct backend route
+      const endpoint = action.type === 'checkout' ? '/checkout' : '/return';
 
-    if (updateRes.rowCount === 0) {
-      throw new Error('Not enough items in stock to fulfill this checkout');
+      try {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          // 2. Format the payload exactly how server.js expects it
+          body: JSON.stringify({
+            items: [{ id: action.item.id, quantity: action.qty }],
+            contractor_id: action.contractorId,
+            project_id: action.projectId
+          })
+        });
+
+        if (!response.ok) {
+          console.error(`Failed to process ${action.type} for ${action.item.name}`);
+          allSuccessful = false;
+        }
+      } catch (error) {
+        console.error("Error submitting transaction:", error);
+        allSuccessful = false;
+      }
     }
 
-    // Step B: Log the transaction with the dynamic quantity
-    await client.query(
-      `INSERT INTO transactions (inventory_id, contractor_id, project_id, action_type, quantity_changed) 
-       VALUES ($1, $2, $3, 'CHECK_OUT', $4)`,
-      [inventoryId, contractorId, projectId, quantityChanged]
-    );
-
-    await client.query('COMMIT');
-    res.json({ success: true, message: 'Checkout successful' });
-
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error("Checkout failed:", err.message);
-    res.status(500).json({ error: 'Checkout failed' });
-  } finally {
-    client.release();
-  }
-});
-
-// POST: PROCESS A RETURN (Bulk-Safe)
-app.post('/return', authenticateToken, async (req, res) => {
-  const client = await pool.connect();
-
-  try {
-    const { inventoryId, contractorId, projectId, quantityChanged } = req.body;
-    
-    await client.query('BEGIN');
-
-    // Step A: Increase by the requested quantity
-    await client.query(
-      `UPDATE inventory 
-       SET quantity = quantity + $2 
-       WHERE id = $1`,
-      [inventoryId, quantityChanged]
-    );
-
-    // Step B: Log the transaction with the dynamic quantity
-    await client.query(
-      `INSERT INTO transactions (inventory_id, contractor_id, project_id, action_type, quantity_changed) 
-       VALUES ($1, $2, $3, 'RETURN', $4)`,
-      [inventoryId, contractorId, projectId, quantityChanged]
-    );
-
-    await client.query('COMMIT');
-    res.json({ success: true, message: 'Return successful' });
-
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error("Return failed:", err.message);
-    res.status(500).json({ error: 'Return failed' });
-  } finally {
-    client.release();
-  }
-});
-
-// GET RECENT TRANSACTIONS
-app.get('/transactions', authenticateToken, async (req, res) => {
-  try {
-    const query = `
-      SELECT t.id, i.name as item, c.first_name, c.last_name, t.action_type, 
-      t.quantity_changed, t.transaction_date as timestamp  
-      FROM transactions t
-      JOIN inventory i ON t.inventory_id = i.id
-      JOIN contractors c ON t.contractor_id = c.id
-      ORDER BY t.transaction_date DESC 
-      LIMIT 10
-    `;
-    const result = await pool.query(query);
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+    // 3. Clean up UI if everything worked
+    if (allSuccessful) {
+      setActionQueue([]); // Clear the cart
+      fetchAllData();     // Refresh the inventory quantities from the database
+      // Optional: You can add a success message state here instead of an alert if you prefer
+      alert("All transactions processed successfully!"); 
+    } else {
+      alert("Some transactions failed to process. Please check the console.");
+    }
+  };
 
 // GET ALL HISTORY (For Detailed Search / Reports)
 app.get('/history', authenticateToken, async (req, res) => {
@@ -335,27 +285,38 @@ app.get('/history', authenticateToken, async (req, res) => {
   }
 });
 
-// POST: ADD NEW INVENTORY ITEM
+// ADD A NEW INVENTORY ITEM
 app.post('/inventory', authenticateToken, async (req, res) => {
-  const { name, category, quantity, location, unit_cost } = req.body;
+  // 1. Block limited users
+  if (req.user.role === 'limited') {
+    return res.status(403).json({ error: "Access denied. Limited users cannot add items." });
+  }
+
+  let { name, category, quantity, location, unit_cost } = req.body;
+
+  // 2. Force quantity to 0 for standard users so they have to transact it in
+  if (req.user.role !== 'admin') {
+    quantity = 0; 
+  }
 
   try {
-    const newTool = await pool.query(
+    const newItem = await pool.query(
       `INSERT INTO inventory (name, category, quantity, location, unit_cost) 
-       VALUES ($1, $2, $3, $4, $5) 
-       RETURNING *`,
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [name, category, quantity, location, unit_cost]
     );
-
-    res.json(newTool.rows[0]);
+    res.json(newItem.rows[0]);
   } catch (err) {
     console.error(err.message);
-    res.status(500).json({ error: 'Failed to add item' });
+    res.status(500).json({ error: 'Server error adding item' });
   }
 });
 
 // POST: ADD NEW CONTRACTOR
 app.post('/contractors', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: "Access denied. Only administrators can add contractors." });
+  }
   try {
     const { first_name, last_name, phone, email } = req.body;
     const newContractor = await pool.query(
@@ -371,6 +332,9 @@ app.post('/contractors', authenticateToken, async (req, res) => {
 
 // POST: ADD NEW PROJECT
 app.post('/projects', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: "Access denied. Only administrators can add projects." });
+  }
   try {
     const { name, address } = req.body;
     const newProject = await pool.query(
@@ -386,6 +350,9 @@ app.post('/projects', authenticateToken, async (req, res) => {
 
 // PUT: UPDATE EXISTING INVENTORY ITEM
 app.put('/inventory/:id', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: "Access denied. Admins only." });
+  }
   try {
     const { id } = req.params;
     const { name, category, quantity, location, unit_cost } = req.body;
@@ -411,6 +378,9 @@ app.put('/inventory/:id', authenticateToken, async (req, res) => {
 
 // Add a new Contractor
 app.post('/contractors', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: "Access denied. Only administrators can add contractors." });
+  }
   try {
     const { first_name, last_name } = req.body;
     await pool.query('INSERT INTO contractors (first_name, last_name) VALUES ($1, $2)', [first_name, last_name]);
@@ -423,6 +393,9 @@ app.post('/contractors', authenticateToken, async (req, res) => {
 
 // Add a new Project
 app.post('/projects', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: "Access denied. Only administrators can add projects." });
+  }
   try {
     const { name } = req.body;
     await pool.query('INSERT INTO projects (name) VALUES ($1)', [name]);
@@ -435,6 +408,9 @@ app.post('/projects', authenticateToken, async (req, res) => {
 
 // Update a Contractor
 app.put('/contractors/:id', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: "Access denied. Admins only." });
+  }
   try {
     const { id } = req.params;
     const { first_name, last_name } = req.body;
@@ -448,6 +424,9 @@ app.put('/contractors/:id', authenticateToken, async (req, res) => {
 
 // Update a Project
 app.put('/projects/:id', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: "Access denied. Admins only." });
+  }
   try {
     const { id } = req.params;
     const { name } = req.body;
@@ -461,6 +440,9 @@ app.put('/projects/:id', authenticateToken, async (req, res) => {
 
 // SOFT DELETE AN INVENTORY ITEM
 app.delete('/inventory/:id', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: "Access denied. Admins only." });
+  }
   try {
     const { id } = req.params;
     await pool.query('UPDATE inventory SET is_active = false WHERE id = $1', [id]);
@@ -473,6 +455,9 @@ app.delete('/inventory/:id', authenticateToken, async (req, res) => {
 
 // SOFT DELETE A CONTRACTOR
 app.delete('/contractors/:id', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: "Access denied. Admins only." });
+  }
   try {
     const { id } = req.params;
     await pool.query('UPDATE contractors SET is_active = false WHERE id = $1', [id]);
@@ -485,6 +470,9 @@ app.delete('/contractors/:id', authenticateToken, async (req, res) => {
 
 // SOFT DELETE A PROJECT
 app.delete('/projects/:id', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: "Access denied. Admins only." });
+  }
   try {
     const { id } = req.params;
     await pool.query('UPDATE projects SET is_active = false WHERE id = $1', [id]);
@@ -492,6 +480,40 @@ app.delete('/projects/:id', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error(err.message);
     res.status(500).json({ error: 'Server error soft deleting project' });
+  }
+});
+
+// POST: ADD NEW APP USER (Admin Only)
+app.post('/users', authenticateToken, async (req, res) => {
+  // 1. Security Check: Ensure the person making the request is an Admin
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: "Access denied. Only admins can create users." });
+  }
+
+  const { email, role, access_expires_at } = req.body;
+
+  try {
+    // 2. Set an invite expiration (e.g., 7 days from now)
+    const invite_expires_at = new Date();
+    invite_expires_at.setDate(invite_expires_at.getDate() + 7);
+
+    // 3. Insert the new user into the database as 'pending'
+    // If access_expires_at is empty, we pass null so they have permanent access
+    const newUser = await pool.query(
+      `INSERT INTO users (email, role, status, access_expires_at, invite_expires_at) 
+       VALUES ($1, $2, 'pending', $3, $4) 
+       RETURNING id, email, role, status`,
+      [email, role, access_expires_at || null, invite_expires_at]
+    );
+
+    res.json({ message: "User invited successfully!", user: newUser.rows[0] });
+  } catch (err) {
+    console.error("Error adding user:", err.message);
+    // Handle the specific error where the email is already in the database
+    if (err.code === '23505') { 
+      return res.status(400).json({ error: "A user with this email already exists." });
+    }
+    res.status(500).json({ error: "Server error while adding user." });
   }
 });
 

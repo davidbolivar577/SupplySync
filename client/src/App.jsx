@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import AdminTools from './components/AdminTools';
 import DetailedSearch from './components/DetailedSearch';
 import Login from './components/Login';
+import AddItemForm from './components/AddItemForm';
 
 function App() {
   const API_BASE_URL = import.meta.env.VITE_API_URL;
@@ -18,6 +19,8 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [itemQuantities, setItemQuantities] = useState({});
+
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const [currentView, setCurrentView] = useState('dashboard');
 
@@ -36,7 +39,7 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem('inventory_token');
     localStorage.removeItem('user_role');
-    
+
     setIsAuthenticated(false);
     setUserRole('');
   };
@@ -109,33 +112,47 @@ function App() {
   const handleSubmitQueue = async () => {
     if (actionQueue.length === 0) return;
 
-    try {
-      for (const action of actionQueue) {
-        const payload = {
-          item_id: action.item.id,
-          contractor_name: action.contractorName,
-          project_name: action.projectName,
-          quantity: action.qty,
-          action_type: action.type === 'checkout' ? 'CHECK_OUT' : 'RETURN'
-        };
+    const token = localStorage.getItem('inventory_token');
+    let allSuccessful = true;
 
-        const token = localStorage.getItem('inventory_token');
-        const response = await fetch(`${API_BASE_URL}/inventory/transaction`, {
+    // Process each item in the queue
+    for (const action of actionQueue) {
+      // 1. Dynamically pick the correct backend route
+      const endpoint = action.type === 'checkout' ? '/checkout' : '/return';
+
+      try {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ transactions: payload })
+          // 2. Format the payload exactly how server.js expects it
+          body: JSON.stringify({
+            items: [{ id: action.item.id, quantity: action.qty }],
+            contractor_id: action.contractorId,
+            project_id: action.projectId
+          })
         });
-      }
 
-      setActionQueue([]);
-      fetchAllData();
-      alert("All actions processed successfully!");
-    } catch (error) {
-      console.error("Error processing queue:", error);
-      alert("An error occurred while processing the queue. Check console.");
+        if (!response.ok) {
+          console.error(`Failed to process ${action.type} for ${action.item.name}`);
+          allSuccessful = false;
+        }
+      } catch (error) {
+        console.error("Error submitting transaction:", error);
+        allSuccessful = false;
+      }
+    }
+
+    // 3. Clean up UI if everything worked
+    if (allSuccessful) {
+      setActionQueue([]); // Clear the cart
+      fetchAllData();     // Refresh the inventory quantities from the database
+      // Optional: You can add a success message state here instead of an alert if you prefer
+      alert("All transactions processed successfully!");
+    } else {
+      alert("Some transactions failed to process. Please check the console.");
     }
   };
 
@@ -155,12 +172,16 @@ function App() {
       {/* TOP NAVIGATION BAR */}
       <div className="app-header">
         <h1 className="m-0 text-primary">Inventory Portal</h1>
-        
+
         <div className="header-actions">
+          <button onClick={() => setCurrentView(currentView === 'dashboard' ? 'search' : 'dashboard')} className="btn-primary">
+            {currentView === 'dashboard' ? '📊 View Reports' : '🏠 Back to Dashboard'}
+          </button>
+
           <button onClick={toggleTheme} className="btn-secondary" style={{ padding: '8px 16px' }}>
             {theme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode'}
           </button>
-          
+
           <button onClick={handleLogout} className="btn-secondary text-danger" style={{ padding: '8px 16px', fontWeight: 'bold' }}>
             Log Out
           </button>
@@ -170,17 +191,19 @@ function App() {
       {currentView === 'dashboard' ? (
         <>
           {/* SELECTION BAR */}
-          <div className="card selection-bar">
-            <h3 className="m-0 w-full">1. Select Job Details:</h3>
-            <select value={selectedContractor} onChange={(e) => setSelectedContractor(e.target.value)}>
-              <option value="">-- Select Contractor --</option>
-              {contractors.map(c => <option key={c.id} value={`${c.first_name} ${c.last_name}`}>{c.first_name} {c.last_name}</option>)}
-            </select>
-            <select value={selectedProject} onChange={(e) => setSelectedProject(e.target.value)}>
-              <option value="">-- Select Project --</option>
-              {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-            </select>
-          </div>
+          {userRole !== 'limited' && (
+            <div className="card selection-bar">
+              <h3 className="m-0 w-full">1. Select Job Details:</h3>
+              <select value={selectedContractor} onChange={(e) => setSelectedContractor(e.target.value)}>
+                <option value="">-- Select Contractor --</option>
+                {contractors.map(c => <option key={c.id} value={`${c.first_name} ${c.last_name}`}>{c.first_name} {c.last_name}</option>)}
+              </select>
+              <select value={selectedProject} onChange={(e) => setSelectedProject(e.target.value)}>
+                <option value="">-- Select Project --</option>
+                {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+              </select>
+            </div>
+          )}
 
           {/* TWO-COLUMN LAYOUT */}
           <div className="layout-grid">
@@ -204,6 +227,28 @@ function App() {
                 </select>
               </div>
 
+              {userRole !== 'limited' && (
+                <div style={{ marginBottom: '15px' }}>
+                  <button onClick={() => setShowAddForm(!showAddForm)} className="btn-secondary">
+                    {showAddForm ? '- Cancel New Item' : '+ Add New Item to Catalog'}
+                  </button>
+
+                  {showAddForm && (
+                    <div className="card mt-15">
+                      <h3>Create New Catalog Item</h3>
+                      <AddItemForm
+                        userRole={userRole}
+                        onAddSuccess={() => {
+                          fetchAllData();
+                          setShowAddForm(false);
+                          alert("Item added! Please check it in to add quantity.");
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Responsive Wrapper for Table */}
               <div className="table-responsive">
                 <table className="dashboard-table">
@@ -212,9 +257,9 @@ function App() {
                       <th>Name</th>
                       <th>Category</th>
                       <th>Available</th>
-                      <th>Loc</th>
-                      <th>Action Qty</th>
-                      <th>Quick Actions</th>
+                      <th>Location</th>
+                      {userRole !== 'limited' && <th>Action Qty</th>}
+                      {userRole !== 'limited' && <th>Quick Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -228,26 +273,26 @@ function App() {
                           </span>
                         </td>
                         <td className="text-muted">{item.location}</td>
-                        <td>
-                          <input
-                            type="number"
-                            min="1"
-                            value={itemQuantities[item.id] || ''}
-                            onChange={(e) => setItemQuantities({ ...itemQuantities, [item.id]: e.target.value })}
-                            placeholder="1"
-                            style={{ width: '60px', padding: '6px' }}
-                          />
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button onClick={() => handleQueueAction(item, 'checkout')} className="btn-danger">
-                              Out
-                            </button>
-                            <button onClick={() => handleQueueAction(item, 'return')} className="btn-success">
-                              In
-                            </button>
-                          </div>
-                        </td>
+                        {userRole !== 'limited' && (
+                          <td>
+                            <input
+                              type="number"
+                              min="1"
+                              value={itemQuantities[item.id] || ''}
+                              onChange={(e) => setItemQuantities({ ...itemQuantities, [item.id]: e.target.value })}
+                              placeholder="1"
+                              style={{ width: '60px', padding: '6px' }}
+                            />
+                          </td>
+                        )}
+                        {userRole !== 'limited' && (
+                          <td>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button onClick={() => handleQueueAction(item, 'checkout')} className="btn-danger">Out</button>
+                              <button onClick={() => handleQueueAction(item, 'return')} className="btn-success">In</button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
                     {filteredInventory.length === 0 && (
@@ -259,39 +304,41 @@ function App() {
             </div>
 
             {/* RIGHT COLUMN: PENDING ACTIONS CART */}
-            <div className="card col-sidebar">
-              <h2 className="m-0 mb-15">3. Pending Actions</h2>
+            {userRole !== 'limited' && (
+              <div className="card col-sidebar">
+                <h2 className="m-0 mb-15">3. Pending Actions</h2>
 
-              {actionQueue.length === 0 ? (
-                <p className="text-muted" style={{ fontStyle: 'italic', textAlign: 'center', padding: '20px 0' }}>
-                  Queue is empty. Select items to check out or return.
-                </p>
-              ) : (
-                <>
-                  <ul className="pending-list mb-15">
-                    {actionQueue.map(action => (
-                      <li key={action.id} className="pending-item">
-                        <div className="pending-item-header">
-                          <strong className={action.type === 'checkout' ? 'text-danger' : 'text-success'}>
-                            {action.type === 'checkout' ? '📉 Checkout' : '📈 Return'}
-                          </strong>
-                          <button onClick={() => handleRemoveFromQueue(action.id)} className="btn-icon-only text-danger" title="Remove">
-                            ✕
-                          </button>
-                        </div>
-                        <div>
-                          Item: <span className="font-bold">{action.item.name}</span> <strong className="text-primary">(Qty: {action.qty})</strong>
-                        </div>
-                        <div className="text-muted">For: {action.contractorName}</div>
-                      </li>
-                    ))}
-                  </ul>
-                  <button onClick={handleSubmitQueue} className="btn-primary w-full" style={{ padding: '12px', fontSize: '1.1rem' }}>
-                    Submit All Changes
-                  </button>
-                </>
-              )}
-            </div>
+                {actionQueue.length === 0 ? (
+                  <p className="text-muted" style={{ fontStyle: 'italic', textAlign: 'center', padding: '20px 0' }}>
+                    Queue is empty. Select items to check out or return.
+                  </p>
+                ) : (
+                  <>
+                    <ul className="pending-list mb-15">
+                      {actionQueue.map(action => (
+                        <li key={action.id} className="pending-item">
+                          <div className="pending-item-header">
+                            <strong className={action.type === 'checkout' ? 'text-danger' : 'text-success'}>
+                              {action.type === 'checkout' ? '📉 Checkout' : '📈 Return'}
+                            </strong>
+                            <button onClick={() => handleRemoveFromQueue(action.id)} className="btn-icon-only text-danger" title="Remove">
+                              ✕
+                            </button>
+                          </div>
+                          <div>
+                            Item: <span className="font-bold">{action.item.name}</span> <strong className="text-primary">(Qty: {action.qty})</strong>
+                          </div>
+                          <div className="text-muted">For: {action.contractorName}</div>
+                        </li>
+                      ))}
+                    </ul>
+                    <button onClick={handleSubmitQueue} className="btn-primary w-full" style={{ padding: '12px', fontSize: '1.1rem' }}>
+                      Submit All Changes
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
 
           </div>
         </>
