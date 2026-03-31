@@ -218,52 +218,67 @@ app.get('/projects', authenticateToken, async (req, res) => {
   }
 });
 
-const handleSubmitQueue = async () => {
-    if (actionQueue.length === 0) return;
-
-    const token = localStorage.getItem('inventory_token');
-    let allSuccessful = true;
-
-    // Process each item in the queue
-    for (const action of actionQueue) {
-      // 1. Dynamically pick the correct backend route
-      const endpoint = action.type === 'checkout' ? '/checkout' : '/return';
-
-      try {
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          // 2. Format the payload exactly how server.js expects it
-          body: JSON.stringify({
-            items: [{ id: action.item.id, quantity: action.qty }],
-            contractor_id: action.contractorId,
-            project_id: action.projectId
-          })
-        });
-
-        if (!response.ok) {
-          console.error(`Failed to process ${action.type} for ${action.item.name}`);
-          allSuccessful = false;
-        }
-      } catch (error) {
-        console.error("Error submitting transaction:", error);
-        allSuccessful = false;
-      }
+// --- PROCESS CHECKOUT ---
+app.post('/checkout', authenticateToken, async (req, res) => {
+  const { items, contractor_id, project_id } = req.body;
+  
+  try {
+    await pool.query('BEGIN'); // Start transaction lock
+    
+    for (const item of items) {
+      // 1. Subtract from inventory
+      await pool.query(
+        'UPDATE inventory SET quantity = quantity - $1 WHERE id = $2',
+        [item.quantity, item.id]
+      );
+      
+      // 2. Log the transaction
+      await pool.query(
+        `INSERT INTO transactions (inventory_id, contractor_id, project_id, action_type, quantity_changed) 
+         VALUES ($1, $2, $3, 'CHECKOUT', $4)`,
+        [item.id, contractor_id || null, project_id || null, item.quantity]
+      );
     }
+    
+    await pool.query('COMMIT'); // Save changes
+    res.json({ message: "Checkout processed successfully!" });
+  } catch (err) {
+    await pool.query('ROLLBACK'); // Undo everything if an error occurs
+    console.error("Checkout Error:", err.message);
+    res.status(500).json({ error: "Failed to process checkout" });
+  }
+});
 
-    // 3. Clean up UI if everything worked
-    if (allSuccessful) {
-      setActionQueue([]); // Clear the cart
-      fetchAllData();     // Refresh the inventory quantities from the database
-      // Optional: You can add a success message state here instead of an alert if you prefer
-      alert("All transactions processed successfully!"); 
-    } else {
-      alert("Some transactions failed to process. Please check the console.");
+// --- PROCESS RETURN ---
+app.post('/return', authenticateToken, async (req, res) => {
+  const { items, contractor_id, project_id } = req.body;
+  
+  try {
+    await pool.query('BEGIN'); // Start transaction lock
+    
+    for (const item of items) {
+      // 1. Add back to inventory
+      await pool.query(
+        'UPDATE inventory SET quantity = quantity + $1 WHERE id = $2',
+        [item.quantity, item.id]
+      );
+      
+      // 2. Log the transaction
+      await pool.query(
+        `INSERT INTO transactions (inventory_id, contractor_id, project_id, action_type, quantity_changed) 
+         VALUES ($1, $2, $3, 'RETURN', $4)`,
+        [item.id, contractor_id || null, project_id || null, item.quantity]
+      );
     }
-  };
+    
+    await pool.query('COMMIT'); // Save changes
+    res.json({ message: "Return processed successfully!" });
+  } catch (err) {
+    await pool.query('ROLLBACK'); // Undo everything if an error occurs
+    console.error("Return Error:", err.message);
+    res.status(500).json({ error: "Failed to process return" });
+  }
+});
 
 // GET ALL HISTORY (For Detailed Search / Reports)
 app.get('/history', authenticateToken, async (req, res) => {
