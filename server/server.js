@@ -191,27 +191,33 @@ app.get('/projects', authenticateToken, async (req, res) => {
 app.post('/checkout', authenticateToken, async (req, res) => {
   const { items, contractor_id, project_id } = req.body;
   
+  // 1. Grab a dedicated connection from the pool
+  const client = await pool.connect(); 
+  
   try {
-    await pool.query('BEGIN'); 
+    await client.query('BEGIN'); // Start transaction on THIS specific connection
     
     for (const item of items) {
-      await pool.query(
+      await client.query(
         'UPDATE inventory SET quantity = quantity - $1 WHERE id = $2',
         [item.quantity, item.id]
       );
-      await pool.query(
+      await client.query(
         `INSERT INTO transactions (inventory_id, contractor_id, project_id, action_type, quantity_changed) 
          VALUES ($1, $2, $3, 'CHECKOUT', $4)`,
         [item.id, contractor_id || null, project_id || null, item.quantity]
       );
     }
     
-    await pool.query('COMMIT'); 
+    await client.query('COMMIT'); // Save changes
     res.json({ message: "Checkout processed successfully." });
   } catch (err) {
-    await pool.query('ROLLBACK'); 
+    await client.query('ROLLBACK'); // Undo everything if an error occurs
     console.error("Checkout Error:", err.message);
     res.status(500).json({ error: "Failed to process checkout." });
+  } finally {
+    // 2. CRITICAL: Release the connection back to the pool
+    client.release(); 
   }
 });
 
@@ -219,27 +225,33 @@ app.post('/checkout', authenticateToken, async (req, res) => {
 app.post('/return', authenticateToken, async (req, res) => {
   const { items, contractor_id, project_id } = req.body;
   
+  // 1. Grab a dedicated connection from the pool
+  const client = await pool.connect();
+  
   try {
-    await pool.query('BEGIN'); 
+    await client.query('BEGIN'); // Start transaction on THIS specific connection
     
     for (const item of items) {
-      await pool.query(
+      await client.query(
         'UPDATE inventory SET quantity = quantity + $1 WHERE id = $2',
         [item.quantity, item.id]
       );
-      await pool.query(
+      await client.query(
         `INSERT INTO transactions (inventory_id, contractor_id, project_id, action_type, quantity_changed) 
          VALUES ($1, $2, $3, 'RETURN', $4)`,
         [item.id, contractor_id || null, project_id || null, item.quantity]
       );
     }
     
-    await pool.query('COMMIT'); 
+    await client.query('COMMIT'); // Save changes
     res.json({ message: "Return processed successfully." });
   } catch (err) {
-    await pool.query('ROLLBACK'); 
+    await client.query('ROLLBACK'); // Undo everything if an error occurs
     console.error("Return Error:", err.message);
     res.status(500).json({ error: "Failed to process return." });
+  } finally {
+    // 2. CRITICAL: Release the connection back to the pool
+    client.release();
   }
 });
 
