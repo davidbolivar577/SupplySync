@@ -1,5 +1,10 @@
 const { Pool } = require('pg');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
+
+// Read the CA certificate content from the .pem file
+const caCert = fs.readFileSync(path.join(__dirname, 'byuicse-psql-cert.pem'));
 
 const pool = new Pool({
     user: process.env.DB_USER,
@@ -8,10 +13,13 @@ const pool = new Pool({
     port: process.env.DB_PORT,
     database: process.env.DB_NAME,
     ssl: {
-        rejectUnauthorized: false // Required for most remote hosts (Render, Railway, Neon, etc.)
+        ca: caCert,                 // Use the certificate content
+        rejectUnauthorized: true,   // Keep this true for proper security
+        checkServerIdentity: () => { return undefined; } // Skip hostname verification
     }
 });
 
+// Test the connection on startup
 pool.query('SELECT NOW()', (err, res) => {
     if (err) {
         console.error('❌ Connection Failed:', err);
