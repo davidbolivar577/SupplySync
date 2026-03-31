@@ -470,3 +470,24 @@ app.post('/users', authenticateToken, async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+// --- GRACEFUL SHUTDOWN HANDLER ---
+// Listen for Render/Node terminating the server
+const shutdown = async (signal) => {
+  console.log(`\n🛑 Received ${signal}. Shutting down gracefully...`);
+  try {
+    // 1. Tell the database pool to close all active and idle connections
+    await pool.end();
+    console.log('✅ Database connection pool completely closed.');
+    
+    // 2. Exit the Node process successfully
+    process.exit(0);
+  } catch (err) {
+    console.error('❌ Error during database pool shutdown:', err.message);
+    process.exit(1);
+  }
+};
+
+// Catch termination signals from the server OS (like Render pausing or redeploying)
+process.on('SIGINT', () => shutdown('SIGINT'));   // Ctrl+C in terminal
+process.on('SIGTERM', () => shutdown('SIGTERM')); // Render shutdown signal
