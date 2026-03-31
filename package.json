@@ -1,10 +1,6 @@
 {
   "scripts": {
-    "server": "cd server && node server.js",
-    "client": "npm run dev --prefix client",
-    "dev": "concurrently --names \"server,client\" -c \"cyan,magenta\" \"npm run server\" \"npm run client\""
-  },
-  "devDependencies": {
-    "concurrently": "^9.2.1"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   }
 }
