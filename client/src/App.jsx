@@ -89,16 +89,22 @@ function App() {
       return;
     }
 
-    const contractorName = contractors.find(c => `${c.first_name} ${c.last_name}` === selectedContractor)
-      ? selectedContractor : "Unknown Contractor";
+    // Find the actual names for the UI display based on the selected IDs
+    const foundContractor = contractors.find(c => c.id.toString() === selectedContractor);
+    const contractorName = foundContractor ? `${foundContractor.first_name} ${foundContractor.last_name}` : "Unknown Contractor";
+
+    const foundProject = projects.find(p => p.id.toString() === selectedProject);
+    const projectName = foundProject ? foundProject.name : "Unknown Project";
 
     const newAction = {
       id: Date.now(),
       item,
       type,
       qty: parseInt(qtyInput, 10),
+      contractorId: selectedContractor, // Explicitly save the ID
+      projectId: selectedProject,       // Explicitly save the ID
       contractorName,
-      projectName: selectedProject
+      projectName
     };
 
     setActionQueue([...actionQueue, newAction]);
@@ -196,11 +202,13 @@ function App() {
               <h3 className="m-0 w-full">1. Select Job Details:</h3>
               <select value={selectedContractor} onChange={(e) => setSelectedContractor(e.target.value)}>
                 <option value="">-- Select Contractor --</option>
-                {contractors.map(c => <option key={c.id} value={`${c.first_name} ${c.last_name}`}>{c.first_name} {c.last_name}</option>)}
+                {/* CHANGED: value is now c.id instead of the name string */}
+                {contractors.map(c => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)}
               </select>
               <select value={selectedProject} onChange={(e) => setSelectedProject(e.target.value)}>
                 <option value="">-- Select Project --</option>
-                {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                {/* CHANGED: value is now p.id instead of the name string */}
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
           )}
