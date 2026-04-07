@@ -309,6 +309,7 @@ function AdminTools({ API_BASE_URL, inventory, contractors, projects, onAddSucce
               onChange={(e) => setUserRole(e.target.value)} 
               className="admin-input" 
             >
+              <option value="limited">Limited</option>
               <option value="user">Standard User</option>
               <option value="admin">Administrator</option>
             </select>
