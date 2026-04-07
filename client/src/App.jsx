@@ -199,7 +199,7 @@ function App() {
           {/* SELECTION BAR */}
           {userRole !== 'limited' && (
             <div className="card selection-bar">
-              <h3 className="m-0 w-full">1. Select Job Details:</h3>
+              <h3 className="m-0 w-full">Select Job Details:</h3>
               <select value={selectedContractor} onChange={(e) => setSelectedContractor(e.target.value)}>
                 <option value="">-- Select Contractor --</option>
                 {/* CHANGED: value is now c.id instead of the name string */}
@@ -218,7 +218,7 @@ function App() {
 
             {/* LEFT COLUMN: INVENTORY */}
             <div className="card col-main">
-              <h2 className="m-0 mb-15">2. Find Items</h2>
+              <h2 className="m-0 mb-15">Find Items</h2>
 
               <div className="controls-bar">
                 <input
