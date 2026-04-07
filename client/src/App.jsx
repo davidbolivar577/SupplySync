@@ -314,7 +314,7 @@ function App() {
             {/* RIGHT COLUMN: PENDING ACTIONS CART */}
             {userRole !== 'limited' && (
               <div className="card col-sidebar">
-                <h2 className="m-0 mb-15">3. Pending Actions</h2>
+                <h2 className="m-0 mb-15">Pending Actions</h2>
 
                 {actionQueue.length === 0 ? (
                   <p className="text-muted" style={{ fontStyle: 'italic', textAlign: 'center', padding: '20px 0' }}>
